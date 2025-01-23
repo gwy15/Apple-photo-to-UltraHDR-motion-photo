@@ -105,14 +105,13 @@ impl ConvertRequest {
     }
 
     /// Returns encoded grayscale image
-    fn create_ultra_hdr_gainmap(
+    fn create_gainmap_jpg(
         apple_hdr_gainmap: &libheif_rs::Image,
         apple_headroom: f32,
     ) -> anyhow::Result<Vec<u8>> {
         let planes = apple_hdr_gainmap.planes();
-        debug!("planes: {planes:?}");
         let hdr_gainmap = planes.y.context("hdr_gain planes y is None")?;
-        debug!("plane: size={}", hdr_gainmap.data.len());
+        debug!("gainmap plane: size={}", hdr_gainmap.data.len());
         let (width, height) = (hdr_gainmap.width as usize, hdr_gainmap.height as usize);
         anyhow::ensure!(hdr_gainmap.storage_bits_per_pixel == 8);
         anyhow::ensure!(hdr_gainmap.data.len() == hdr_gainmap.stride * height);
@@ -138,7 +137,18 @@ impl ConvertRequest {
                 ultradr_data[i * width as usize + j] = encoded_recovery;
             }
         }
-        Ok(ultradr_data)
+
+        let jpg_bytes = std::panic::catch_unwind(|| -> std::io::Result<Vec<u8>> {
+            let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_GRAYSCALE);
+            comp.set_size(width, height);
+            let mut comp = comp.start_compress(Vec::new())?;
+            comp.write_scanlines(&ultradr_data)?;
+            let writer = comp.finish()?;
+            Ok(writer)
+        })
+        .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
+
+        Ok(jpg_bytes)
     }
 
     #[inline]
@@ -150,104 +160,144 @@ impl ConvertRequest {
         }
     }
 
-    fn convert_image_libheif_to_libultrahdr(
-        image: &mut libheif_rs::Image,
-    ) -> anyhow::Result<libultrahdr_rs::RawImage<'_>> {
-        // TODO: YCbCr => Linear Y
+    fn convert_primary_image_to_uhdr_sdr(
+        image: &libheif_rs::Image,
+    ) -> Result<libultrahdr_rs::OwnedRawImage> {
+        let (w, h) = (image.width() as usize, image.height() as usize);
+
+        let colorspace = image.color_space().context("no color space")?;
+        anyhow::ensure!(colorspace == libheif_rs::ColorSpace::YCbCr(libheif_rs::Chroma::C420));
+        let y_bits = image
+            .bits_per_pixel(libheif_rs::Channel::Y)
+            .context("no bits per pixel")?;
+        anyhow::ensure!(y_bits == 8);
+        let planes = image.planes();
+        let y = planes.y.context("no y plane")?;
+        let cb = planes.cb.context("no cb")?;
+        let cr = planes.cr.context("no cr")?;
+
+        // anyhow::ensure!(cb.width == w as u32 / 2);
+        // anyhow::ensure!(cb.height == h as u32 / 2);
+
+        let mut output = libultrahdr_rs::OwnedRawImage::new();
+        // output: 4:2:0, 8 bit
+        output.fmt = libultrahdr_rs::sys::uhdr_img_fmt_t::UHDR_IMG_FMT_12bppYCbCr420;
+        output.color_gamut = libultrahdr_rs::sys::uhdr_color_gamut_t::UHDR_CG_DISPLAY_P3;
+        output.color_transfer = libultrahdr_rs::sys::uhdr_color_transfer_t::UHDR_CT_SRGB;
+        output.range = libultrahdr_rs::sys::uhdr_color_range_t::UHDR_CR_FULL_RANGE;
+        output.width = w as u32;
+        output.height = h as u32;
+        output.planes = [y.data.to_vec(), cb.data.to_vec(), cr.data.to_vec()];
+        output.stride = [y.stride as u32, cb.stride as u32, cr.stride as u32];
+        Ok(output)
+    }
+
+    /// Y=F_D/10000 is the normalized linear displayed value, in the range [0:1]
+    fn linear_to_pq(y: f32) -> f32 {
+        let c1 = 0.8359375;
+        let c2 = 18.8515625;
+        let c3 = 18.6875;
+        let m1 = 0.1593017578125;
+        let m2 = 78.84375;
+        ((c1 + c2 * y.powf(m1)) / (1.0 + c3 * y.powf(m1))).powf(m2)
+    }
+
+    fn mix_sdr_and_gainmap(
+        sdr: &libultrahdr_rs::BorrowedRawImage<'_>,
+        apple_gainmap: &libheif_rs::Image,
+        apple_headroom: f32,
+    ) -> Result<libultrahdr_rs::OwnedRawImage> {
         use libultrahdr_rs::sys;
-        let (width, height) = (image.width(), image.height());
-        // color space to fmt
-        let colorspace = image.color_space().context("No colorspace in heic")?;
-        debug!("colorspace: {:?}", colorspace);
-        let fmt = match colorspace {
-            libheif_rs::ColorSpace::Undefined => anyhow::bail!("No colorspace in heic (undefined)"),
-            libheif_rs::ColorSpace::YCbCr(chroma) => match chroma {
-                libheif_rs::Chroma::C420 => sys::uhdr_img_fmt::UHDR_IMG_FMT_12bppYCbCr420,
-                libheif_rs::Chroma::C422 => sys::uhdr_img_fmt::UHDR_IMG_FMT_16bppYCbCr422,
-                libheif_rs::Chroma::C444 => match image.bits_per_pixel(libheif_rs::Channel::Y) {
-                    Some(8) => sys::uhdr_img_fmt::UHDR_IMG_FMT_24bppYCbCr444,
-                    Some(10) => sys::uhdr_img_fmt::UHDR_IMG_FMT_30bppYCbCr444,
-                    p => anyhow::bail!("Unknown YCbCr with {p:?} bits per pixel"),
-                },
-            },
-            libheif_rs::ColorSpace::Rgb(rgb_chroma) => {
-                anyhow::bail!("unsupported image color space ({rgb_chroma:?})")
-            }
-            libheif_rs::ColorSpace::Monochrome => {
-                anyhow::bail!("unsupported image color space (monochrome)")
-            }
-        };
-        debug!("uhdr converted format: {colorspace:?} => {fmt:?}");
+        let mut image = libultrahdr_rs::OwnedRawImage::new();
+        // 10-bit-per component 4:2:0 YCbCr semiplanar
+        image.fmt = sys::uhdr_img_fmt::UHDR_IMG_FMT_24bppYCbCrP010;
+        anyhow::ensure!(sdr.color_gamut == sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3);
+        image.color_gamut = sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
+        anyhow::ensure!(sdr.color_transfer == sys::uhdr_color_transfer::UHDR_CT_SRGB);
+        image.color_transfer = sys::uhdr_color_transfer::UHDR_CT_PQ;
+        anyhow::ensure!(apple_gainmap.width() == sdr.width);
+        anyhow::ensure!(apple_gainmap.height() == sdr.height);
 
-        let heif_planes = image.planes_mut();
-        let mut uhdr_planes = [&mut [] as &mut [u8], &mut [], &mut []];
-        let mut stride = [0; 3];
-        match fmt {
-            sys::uhdr_img_fmt::UHDR_IMG_FMT_12bppYCbCr420 => {
-                let (y, cb, cr) = (
-                    heif_planes.y.unwrap(),
-                    heif_planes.cb.unwrap(),
-                    heif_planes.cr.unwrap(),
-                );
-                stride[sys::UHDR_PLANE_Y as usize] = y.stride as u32;
-                stride[sys::UHDR_PLANE_U as usize] = cb.stride as u32;
-                stride[sys::UHDR_PLANE_V as usize] = cr.stride as u32;
-                uhdr_planes[sys::UHDR_PLANE_Y as usize] = y.data;
-                uhdr_planes[sys::UHDR_PLANE_U as usize] = cb.data;
-                uhdr_planes[sys::UHDR_PLANE_V as usize] = cr.data;
-            }
-            _ => anyhow::bail!("unsupported image format"),
-        };
+        image.range = sdr.range;
+        image.width = sdr.width;
+        image.height = sdr.height;
+        image.stride = sdr.stride;
 
-        let uhdr_raw = libultrahdr_rs::RawImage {
-            fmt,
-            color_gamut: sys::uhdr_color_gamut::UHDR_CG_BT_709,
-            color_transfer: sys::uhdr_color_transfer::UHDR_CT_SRGB,
-            range: sys::uhdr_color_range::UHDR_CR_FULL_RANGE,
-            width,
-            height,
-            planes: uhdr_planes,
-            stride: stride,
-        };
-        Ok(uhdr_raw)
+        image.planes[0] = Vec::with_capacity(sdr.planes[0].len() * 2);
+        let gainmap = apple_gainmap.planes().y.context("no gainmap y")?;
+        let hr_1 = apple_headroom - 1.0;
+        for (y, gainmap) in sdr.planes[0].iter().zip(gainmap.data.iter()) {
+            // [0, 255] => [0, 1023]
+            let y_linear = Self::reverse_srgb_transform(*y as f32 / 255.0);
+            let gainmap_linear = Self::reverse_srgb_transform(*gainmap as f32 / 255.0); // 0 ~ 1
+            let y_linear = y_linear * (1.0 + hr_1 * gainmap_linear); // 0 ~ headroom
+            let y_pq = Self::linear_to_pq(y_linear / apple_headroom * 0.1); // 0 ~ 1
+            let y10 = (y_pq * 1023.0 + 0.5).floor() as u16;
+            let y10 = y10.clamp(0, 1023);
+
+            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[0], y10)
+                .unwrap();
+        }
+
+        image.planes[1] = Vec::with_capacity(sdr.planes[1].len() * 2 * 2);
+        for (cb, cr) in sdr.planes[1].iter().zip(sdr.planes[2].iter()) {
+            // [0, 255] => [0, 1023]
+            let cb10 = (*cb as u16) << 2;
+            let cr10 = (*cr as u16) << 2;
+            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[1], cr10)
+                .unwrap();
+            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[1], cb10)
+                .unwrap();
+        }
+        image.stride[1] *= 2;
+
+        Ok(image)
     }
 
     fn convert_heic_to_jpg(&self, path: &Path) -> anyhow::Result<NamedTempFile> {
         let apple_headroom = self.get_apple_headroom_from_exif(path)?;
         debug!(%apple_headroom, "apple headroom");
 
+        let profile = self
+            .exif_tool()
+            .get_value(path, "ProfileDescription")?
+            .context("No profile description found")?;
+        debug!(%profile, "ProfileDescription");
+        anyhow::ensure!(profile.starts_with("Display P3"));
+
         let lib_heif = LibHeif::new();
         let ctx = HeifContext::read_from_file(path.to_str().unwrap())?;
         let handle = ctx.primary_image_handle()?;
-        debug!(width=%handle.width(), height=%handle.height(), "heic-convert: file opened");
+        let (width, height) = (handle.width(), handle.height());
+        debug!(width, height, "heic-convert: file opened");
 
         // decode
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
         debug!("primary colorspace: {:?}", primary_colorspace);
-        let mut primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
+        let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
+        let mut primary_image = Self::convert_primary_image_to_uhdr_sdr(&primary_image)?;
 
-        let hdr_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;
-        let ultrahdr_gainmap_rgb = Self::create_ultra_hdr_gainmap(&hdr_gainmap, apple_headroom)?;
-
-        // encode
         let mut encoder = libultrahdr_rs::Encoder::new();
-        let raw_sdr_image = Self::convert_image_libheif_to_libultrahdr(&mut primary_image)?;
-        encoder.set_raw_sdr_image(raw_sdr_image)?;
-        // let primary_image = Self::convert_image_libheif_to_libultrahdr(&mut primary_image)?;
-        // encoder.set_raw_hdr_image(primary_image)?;
-        // encoder.
+        encoder.set_raw_sdr_image(primary_image.as_mut())?;
 
-        // encoder.set_gainmap_image(img, metadata)?;
+        let apple_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;
+        let mut gainmap_jpg = Self::create_gainmap_jpg(&apple_gainmap, apple_headroom)?;
+        let gainmap_jpg_compressed = libultrahdr_rs::CompressedImage::from_bytes(&mut gainmap_jpg);
+        let metadata = libultrahdr_rs::GainmapMetadata {
+            max_content_boost: [apple_headroom; 3],
+            min_content_boost: [1.0; 3],
+            gamma: [1.0; 3],
+            offset_sdr: [0.0; 3],
+            offset_hdr: [0.0; 3],
+            hdr_capacity_min: 1.0,
+            hdr_capacity_max: apple_headroom,
+            use_base_cg: 1,
+        };
+        encoder.set_gainmap_image(gainmap_jpg_compressed, metadata)?;
 
         encoder.encode().context("encode failed")?;
         let output = encoder.get_encoded_stream().context("no encoded stream")?;
-        std::fs::write("testoutput/ultrahdr_sdr.jpg", output.as_bytes())?;
-
-        // let mut context = HeifContext::new()?;
-        // let mut encoder = lib_heif.encoder_for_format(libheif_rs::CompressionFormat::Hevc)?;
-        // encoder.set_quality(libheif_rs::EncoderQuality::Lossy(70))?;
-        // context.encode_image(&hdr_gain, &mut encoder, None)?;
-        // context.write_to_file("testoutput/aux.heic")?;
+        std::fs::write("testoutput/ultrahdr.jpg", output.as_bytes())?;
 
         // TODO: make jpg
         todo!()
