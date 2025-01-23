@@ -160,9 +160,7 @@ impl ConvertRequest {
         }
     }
 
-    fn convert_primary_image_to_uhdr_sdr(
-        image: &libheif_rs::Image,
-    ) -> Result<libultrahdr_rs::OwnedRawImage> {
+    fn convert_primary_image_to_jpg(image: &libheif_rs::Image) -> Result<Vec<u8>> {
         let (w, h) = (image.width() as usize, image.height() as usize);
 
         let colorspace = image.color_space().context("no color space")?;
@@ -176,82 +174,34 @@ impl ConvertRequest {
         let cb = planes.cb.context("no cb")?;
         let cr = planes.cr.context("no cr")?;
 
-        // anyhow::ensure!(cb.width == w as u32 / 2);
-        // anyhow::ensure!(cb.height == h as u32 / 2);
+        anyhow::ensure!(cb.width == w as u32 / 2);
+        anyhow::ensure!(cb.height == h as u32 / 2);
 
-        let mut output = libultrahdr_rs::OwnedRawImage::new();
-        // output: 4:2:0, 8 bit
-        output.fmt = libultrahdr_rs::sys::uhdr_img_fmt_t::UHDR_IMG_FMT_12bppYCbCr420;
-        output.color_gamut = libultrahdr_rs::sys::uhdr_color_gamut_t::UHDR_CG_DISPLAY_P3;
-        output.color_transfer = libultrahdr_rs::sys::uhdr_color_transfer_t::UHDR_CT_SRGB;
-        output.range = libultrahdr_rs::sys::uhdr_color_range_t::UHDR_CR_FULL_RANGE;
-        output.width = w as u32;
-        output.height = h as u32;
-        output.planes = [y.data.to_vec(), cb.data.to_vec(), cr.data.to_vec()];
-        output.stride = [y.stride as u32, cb.stride as u32, cr.stride as u32];
-        Ok(output)
-    }
+        let jpg = std::panic::catch_unwind(|| -> std::io::Result<Vec<u8>> {
+            let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_YCbCr);
 
-    /// Y=F_D/10000 is the normalized linear displayed value, in the range [0:1]
-    fn linear_to_pq(y: f32) -> f32 {
-        let c1 = 0.8359375;
-        let c2 = 18.8515625;
-        let c3 = 18.6875;
-        let m1 = 0.1593017578125;
-        let m2 = 78.84375;
-        ((c1 + c2 * y.powf(m1)) / (1.0 + c3 * y.powf(m1))).powf(m2)
-    }
+            comp.set_size(w, h);
+            let mut comp = comp.start_compress(Vec::new())?;
 
-    fn mix_sdr_and_gainmap(
-        sdr: &libultrahdr_rs::BorrowedRawImage<'_>,
-        apple_gainmap: &libheif_rs::Image,
-        apple_headroom: f32,
-    ) -> Result<libultrahdr_rs::OwnedRawImage> {
-        use libultrahdr_rs::sys;
-        let mut image = libultrahdr_rs::OwnedRawImage::new();
-        // 10-bit-per component 4:2:0 YCbCr semiplanar
-        image.fmt = sys::uhdr_img_fmt::UHDR_IMG_FMT_24bppYCbCrP010;
-        anyhow::ensure!(sdr.color_gamut == sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3);
-        image.color_gamut = sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
-        anyhow::ensure!(sdr.color_transfer == sys::uhdr_color_transfer::UHDR_CT_SRGB);
-        image.color_transfer = sys::uhdr_color_transfer::UHDR_CT_PQ;
-        anyhow::ensure!(apple_gainmap.width() == sdr.width);
-        anyhow::ensure!(apple_gainmap.height() == sdr.height);
+            // replace with your image data
+            let mut scanline = vec![0u8; w * 3];
+            for i in 0..h {
+                for j in 0..w {
+                    let index = i * y.stride + j;
+                    scanline[j * 3] = y.data[index];
+                    let index = i / 2 * cb.stride + j / 2;
+                    scanline[j * 3 + 1] = cb.data[index];
+                    scanline[j * 3 + 2] = cr.data[index];
+                }
+                comp.write_scanlines(&scanline)?;
+            }
 
-        image.range = sdr.range;
-        image.width = sdr.width;
-        image.height = sdr.height;
-        image.stride = sdr.stride;
+            let writer = comp.finish()?;
+            Ok(writer)
+        })
+        .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
 
-        image.planes[0] = Vec::with_capacity(sdr.planes[0].len() * 2);
-        let gainmap = apple_gainmap.planes().y.context("no gainmap y")?;
-        let hr_1 = apple_headroom - 1.0;
-        for (y, gainmap) in sdr.planes[0].iter().zip(gainmap.data.iter()) {
-            // [0, 255] => [0, 1023]
-            let y_linear = Self::reverse_srgb_transform(*y as f32 / 255.0);
-            let gainmap_linear = Self::reverse_srgb_transform(*gainmap as f32 / 255.0); // 0 ~ 1
-            let y_linear = y_linear * (1.0 + hr_1 * gainmap_linear); // 0 ~ headroom
-            let y_pq = Self::linear_to_pq(y_linear / apple_headroom * 0.1); // 0 ~ 1
-            let y10 = (y_pq * 1023.0 + 0.5).floor() as u16;
-            let y10 = y10.clamp(0, 1023);
-
-            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[0], y10)
-                .unwrap();
-        }
-
-        image.planes[1] = Vec::with_capacity(sdr.planes[1].len() * 2 * 2);
-        for (cb, cr) in sdr.planes[1].iter().zip(sdr.planes[2].iter()) {
-            // [0, 255] => [0, 1023]
-            let cb10 = (*cb as u16) << 2;
-            let cr10 = (*cr as u16) << 2;
-            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[1], cr10)
-                .unwrap();
-            byteorder::WriteBytesExt::write_u16::<byteorder::LE>(&mut image.planes[1], cb10)
-                .unwrap();
-        }
-        image.stride[1] *= 2;
-
-        Ok(image)
+        Ok(jpg)
     }
 
     fn convert_heic_to_jpg(&self, path: &Path) -> anyhow::Result<NamedTempFile> {
@@ -275,10 +225,13 @@ impl ConvertRequest {
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
         debug!("primary colorspace: {:?}", primary_colorspace);
         let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
-        let mut primary_image = Self::convert_primary_image_to_uhdr_sdr(&primary_image)?;
+        let mut primary_image = Self::convert_primary_image_to_jpg(&primary_image)?;
 
         let mut encoder = libultrahdr_rs::Encoder::new();
-        encoder.set_raw_sdr_image(primary_image.as_mut())?;
+
+        let mut base_image = libultrahdr_rs::CompressedImage::from_bytes(&mut primary_image);
+        *base_image.color_gamut_mut() = libultrahdr_rs::sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
+        encoder.set_compressed_base_image(base_image)?;
 
         let apple_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;
         let mut gainmap_jpg = Self::create_gainmap_jpg(&apple_gainmap, apple_headroom)?;
