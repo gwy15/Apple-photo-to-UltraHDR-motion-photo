@@ -1,3 +1,5 @@
-# iOS-photo-to-UltraHDR-motion-photo
+# Apple-photo-to-UltraHDR-motion-photo
 
-将 iOS 照片（heic+mov）转为 jpg 格式，保留 HDR 效果和动态照片效果。
+Converts Apple's photos to ultra HDR photos, keeping HDR effect and motion photo (live photo).
+
+将苹果照片（heic+mov）转为 jpg 格式，保留 HDR 效果和动态照片效果。
