@@ -11,8 +11,8 @@ name = "main"
 anyhow = "1.0.95"
 tracing = "0.1.41"
 tempfile = "3.15.0"
-libheif-rs = { version = "1.0.2", path = "../libheif-rs" }
-libultrahdr-rs = { path = "../libultrahdr-rs" }
+libheif-rs = "1.1.0"
+libultrahdr-rs = "0.1.0"
 mozjpeg = "0.10.12"
 
 [dev-dependencies]

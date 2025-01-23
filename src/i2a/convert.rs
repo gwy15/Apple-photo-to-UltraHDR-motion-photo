@@ -81,17 +81,12 @@ impl ConvertRequest {
         lib_heif: &libheif_rs::LibHeif,
         handle: &libheif_rs::ImageHandle,
     ) -> anyhow::Result<libheif_rs::Image> {
-        let aux_ids = handle.get_auxiliary_image_ids();
-        for aux_id in aux_ids {
-            let aux_handle = handle.get_auxiliary_image_handle(aux_id)?;
+        for aux_handle in handle.auxiliary_images(libheif_rs::AuxiliaryImagesFilter::new()) {
             // expected "urn:com:apple:photo:2020:aux:hdrgainmap"
             // as per <https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos>
-            let aux_type = aux_handle.get_auxiliary_type()?;
-            debug!(
-                "heic-convert: [{aux_id}]: handle = {aux_handle:?}, type = {:?}",
-                aux_type.to_string_lossy()
-            );
-            if aux_type.as_bytes() != b"urn:com:apple:photo:2020:aux:hdrgainmap" {
+            let aux_type = aux_handle.auxiliary_type()?;
+            debug!("heic-convert: handle type = {aux_type}");
+            if aux_type != "urn:com:apple:photo:2020:aux:hdrgainmap" {
                 continue;
             }
             let aux_image = lib_heif.decode(
@@ -101,8 +96,7 @@ impl ConvertRequest {
                 None,
             )?;
             debug!(
-                "heic-convert: [{aux_id}]: aux image: {:?} ({} x {})",
-                aux_image,
+                "heic-convert: aux image {} x {}",
                 aux_image.width(),
                 aux_image.height()
             );
