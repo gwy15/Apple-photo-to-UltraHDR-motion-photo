@@ -1,11 +1,3 @@
-# Misc
-对于小米的 motion photo (jpg)，参见 [ZhiQiu-Kinsey/AppleLivePhotoConvert]，需要设置
-`Exif.Photo.0x8897 = 1`.
+# iOS-photo-to-UltraHDR-motion-photo
 
-[ZhiQiu-Kinsey/AppleLivePhotoConvert]: https://github.com/ZhiQiu-Kinsey/AppleLivePhotoConvert
-
-## 测试
-- jpg + mp4 + exiftool: 可以
-- jpg + mov + exiftool: 可以
-
-- heic 转 jpg
+将 iOS 照片（heic+mov）转为 jpg 格式，保留 HDR 效果和动态照片效果。
