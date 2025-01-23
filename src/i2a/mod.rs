@@ -17,13 +17,11 @@ impl ConvertRequest {
         self.check_valid().context("request arguments invalid")?;
 
         // only heic is supported
-        let tempfile = self.ensure_jpg()?;
-        if let Some(tempfile) = tempfile.as_ref() {
-            self.image_path = tempfile.path().to_path_buf();
+        let converted = self.ensure_jpg()?;
+        if !converted {
+            self.copy_image()?;
         }
 
-        // TODO: convert mov to mp4?
-        self.copy_image()?;
         self.append_video()?;
         self.update_exif()?;
         Self::sync_file_times(&self.video_path, &self.output_path)?;

@@ -14,15 +14,25 @@ impl ConvertRequest {
 
     /// convert heic to jpg if necessary
     ///
+    /// # Return
+    /// true if converted (to output_path)
+    ///
     /// # Reference
     /// 1. https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos
-    pub(crate) fn ensure_jpg(&self) -> anyhow::Result<Option<NamedTempFile>> {
+    pub(crate) fn ensure_jpg(&self) -> anyhow::Result<bool> {
         let is_heic = self.image_extension()?.to_ascii_lowercase() == "heic";
         if !is_heic {
-            return Ok(None);
+            return Ok(false);
         }
-        let tempfile = self.convert_heic_to_jpg(&self.image_path)?;
-        Ok(Some(tempfile))
+        self.convert_heic_to_jpg(&self.image_path, &self.output_path)?;
+        debug!("tempfile size = {}", self.output_path.metadata()?.len());
+        // sync metadata
+        self.exif_tool()
+            .copy_meta(&self.image_path, &self.output_path)
+            .context("write exiftool failed")?;
+        debug!("heic convert: jpg exif written");
+
+        Ok(true)
     }
 
     fn get_apple_headroom_from_exif(&self, path: &Path) -> anyhow::Result<f32> {
@@ -140,6 +150,7 @@ impl ConvertRequest {
 
         let jpg_bytes = std::panic::catch_unwind(|| -> std::io::Result<Vec<u8>> {
             let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_GRAYSCALE);
+            comp.set_quality(85.0);
             comp.set_size(width, height);
             let mut comp = comp.start_compress(Vec::new())?;
             comp.write_scanlines(&ultradr_data)?;
@@ -147,6 +158,7 @@ impl ConvertRequest {
             Ok(writer)
         })
         .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
+        debug!("gainmap size = {}", jpg_bytes.len());
 
         Ok(jpg_bytes)
     }
@@ -181,6 +193,7 @@ impl ConvertRequest {
             let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_YCbCr);
 
             comp.set_size(w, h);
+            comp.set_quality(85.0);
             let mut comp = comp.start_compress(Vec::new())?;
 
             // replace with your image data
@@ -200,23 +213,24 @@ impl ConvertRequest {
             Ok(writer)
         })
         .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
+        debug!("primary image size = {}", jpg.len());
 
         Ok(jpg)
     }
 
-    fn convert_heic_to_jpg(&self, path: &Path) -> anyhow::Result<NamedTempFile> {
-        let apple_headroom = self.get_apple_headroom_from_exif(path)?;
+    fn convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
+        let apple_headroom = self.get_apple_headroom_from_exif(src)?;
         debug!(%apple_headroom, "apple headroom");
 
         let profile = self
             .exif_tool()
-            .get_value(path, "ProfileDescription")?
+            .get_value(src, "ProfileDescription")?
             .context("No profile description found")?;
         debug!(%profile, "ProfileDescription");
         anyhow::ensure!(profile.starts_with("Display P3"));
 
         let lib_heif = LibHeif::new();
-        let ctx = HeifContext::read_from_file(path.to_str().unwrap())?;
+        let ctx = HeifContext::read_from_file(src.to_str().unwrap())?;
         let handle = ctx.primary_image_handle()?;
         let (width, height) = (handle.width(), handle.height());
         debug!(width, height, "heic-convert: file opened");
@@ -228,6 +242,8 @@ impl ConvertRequest {
         let mut primary_image = Self::convert_primary_image_to_jpg(&primary_image)?;
 
         let mut encoder = libultrahdr_rs::Encoder::new();
+        encoder.set_base_image_quality(85)?;
+        encoder.set_gainmap_image_quality(85)?;
 
         let mut base_image = libultrahdr_rs::CompressedImage::from_bytes(&mut primary_image);
         *base_image.color_gamut_mut() = libultrahdr_rs::sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
@@ -249,10 +265,10 @@ impl ConvertRequest {
         encoder.set_gainmap_image(gainmap_jpg_compressed, metadata)?;
 
         encoder.encode().context("encode failed")?;
-        let output = encoder.get_encoded_stream().context("no encoded stream")?;
-        std::fs::write("testoutput/ultrahdr.jpg", output.as_bytes())?;
+        let output_img = encoder.get_encoded_stream().context("no encoded stream")?;
 
-        // TODO: make jpg
-        todo!()
+        std::fs::write(output, output_img.as_bytes())?;
+
+        Ok(())
     }
 }
