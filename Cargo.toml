@@ -1,0 +1,19 @@
+[package]
+name = "motion"
+version = "0.1.0"
+edition = "2021"
+
+[[example]]
+path = "examples/main.rs"
+name = "main"
+
+[dependencies]
+anyhow = "1.0.95"
+tracing = "0.1.41"
+tempfile = "3.15.0"
+libheif-rs = { version = "1.0.2", path = "../libheif-rs" }
+libultrahdr-rs = { path = "../libultrahdr-rs" }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
+clap = { version = "4.5.26", features = ["derive"] }
