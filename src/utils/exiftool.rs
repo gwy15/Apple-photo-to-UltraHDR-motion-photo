@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+#[derive(Default)]
 pub struct ExifTool {
     pub path: Option<PathBuf>,
 }
@@ -39,5 +40,22 @@ impl ExifTool {
             return Ok(None);
         }
         Ok(Some(value))
+    }
+    pub fn copy_meta(&self, src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+        let output = self
+            .command()
+            .arg("-TagsFromFile")
+            .arg(src.as_ref().as_os_str())
+            .arg("-Orientation=")
+            .arg("-overwrite_original")
+            .arg(dst.as_ref().as_os_str())
+            .output()?;
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "exiftool failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        Ok(())
     }
 }

@@ -13,7 +13,7 @@ pub struct ConvertRequest {
 }
 
 impl ConvertRequest {
-    pub fn execute(mut self) -> anyhow::Result<()> {
+    pub fn execute(self) -> anyhow::Result<()> {
         self.check_valid().context("request arguments invalid")?;
 
         // only heic is supported

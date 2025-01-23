@@ -14,7 +14,6 @@ tempfile = "3.15.0"
 libheif-rs = { version = "1.0.2", path = "../libheif-rs" }
 libultrahdr-rs = { path = "../libultrahdr-rs" }
 mozjpeg = "0.10.12"
-byteorder = "1.5.0"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }

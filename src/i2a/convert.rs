@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use libheif_rs::{HeifContext, LibHeif};
 use std::{ffi::OsStr, path::Path};
-use tempfile::NamedTempFile;
 
 use super::ConvertRequest;
 
@@ -69,12 +68,10 @@ impl ConvertRequest {
             } else {
                 -0.101 * marker48 + 1.601
             }
+        } else if marker48 <= 0.01 {
+            -70.0 * marker48 + 3.0
         } else {
-            if marker48 <= 0.01 {
-                -70.0 * marker48 + 3.0
-            } else {
-                -0.303 * marker48 + 2.303
-            }
+            -0.303 * marker48 + 2.303
         };
         let headroom = (2.0_f32).powf(stops.max(0.0));
         Ok(headroom)
@@ -142,9 +139,9 @@ impl ConvertRequest {
                 //                           = log(hr, 1 + (hr - 1) * gainmap_linear)
                 let log_recovery = (1.0 + hr_1 * hdr_gainmap_linear).ln() / log_hr;
                 // we choose map_gamma = 1.0
-                let recovery = log_recovery.max(0.0).min(1.0);
+                let recovery = log_recovery.clamp(0.0, 1.0);
                 let encoded_recovery = (recovery * 255.0 + 0.5).floor() as u8;
-                ultradr_data[i * width as usize + j] = encoded_recovery;
+                ultradr_data[i * width + j] = encoded_recovery;
             }
         }
 
