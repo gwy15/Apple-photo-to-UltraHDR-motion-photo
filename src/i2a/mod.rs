@@ -14,6 +14,7 @@ pub struct ConvertRequest {
 
 impl ConvertRequest {
     pub fn execute(self) -> anyhow::Result<()> {
+        let t = std::time::Instant::now();
         self.check_valid().context("request arguments invalid")?;
 
         // only heic is supported
@@ -21,10 +22,18 @@ impl ConvertRequest {
         if !converted {
             self.copy_image()?;
         }
+        debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
 
         self.append_video()?;
         self.update_exif()?;
         Self::sync_file_times(&self.video_path, &self.output_path)?;
+        info!(
+            "convert success in {:?}: {} + {} => {}",
+            t.elapsed(),
+            self.image_path.display(),
+            self.video_path.display(),
+            self.output_path.display()
+        );
 
         Ok(())
     }

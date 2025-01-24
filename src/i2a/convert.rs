@@ -24,30 +24,33 @@ impl ConvertRequest {
             return Ok(false);
         }
         self.convert_heic_to_jpg(&self.image_path, &self.output_path)?;
-        debug!("tempfile size = {}", self.output_path.metadata()?.len());
+        debug!(size=%self.output_path.metadata()?.len(), "heic converted to jpg");
         // sync metadata
         self.exif_tool()
             .copy_meta(&self.image_path, &self.output_path)
             .context("write exiftool failed")?;
-        debug!("heic convert: jpg exif written");
-
+        trace!("heic convert: jpg exif copied");
         Ok(true)
     }
 
-    fn get_apple_headroom_from_exif(&self, path: &Path) -> anyhow::Result<f32> {
+    /// Return Some(headroom) if HDR heic, None if not HDR heic
+    fn get_apple_headroom_from_exif(&self, path: &Path) -> anyhow::Result<Option<f32>> {
         // credit: https://github.com/johncf/apple-hdr-heic/blob/e64716c29abc91a3b40543d7c47fb0f526608982/src/apple_hdr_heic/metadata.py#L17
         // reference: https://developer.apple.com/documentation/appkit/images_and_pdf/applying_apple_hdr_effect_to_your_photos
         //            https://github.com/exiftool/exiftool/blob/405674e0/lib/Image/ExifTool/Apple.pm
         // verify HDRGainMapVersion key
-        self.exif_tool()
-            .get_value(path, "xmp:HDRGainMapVersion")?
-            .inspect(|v| debug!("HDRGainMapVersion = {v}"))
-            .context("No HDRGainMapVersion found, not HDR heic")?;
+        let hdr_version = self.exif_tool().get_value(path, "xmp:HDRGainMapVersion")?;
+        let Some(hdr_version) = hdr_version else {
+            debug!("no HDRGainMapVersion, not HDR heic");
+            return Ok(None);
+        };
+        trace!("detected Apple HDRGainMapVersion = {hdr_version}");
         if let Some(headroom) = self.exif_tool().get_value(path, "xmp:HDRGainMapHeadroom")? {
-            debug!(%headroom, "got xmp:HDRGainMapHeadroom");
-            return headroom
+            trace!(%headroom, "got xmp:HDRGainMapHeadroom");
+            let headroom = headroom
                 .parse::<f32>()
-                .context("Invalid HDRGainMapHeadroom value");
+                .context("Invalid HDRGainMapHeadroom value")?;
+            return Ok(Some(headroom));
         }
         // get markers
         let marker33 = self
@@ -74,7 +77,7 @@ impl ConvertRequest {
             -0.303 * marker48 + 2.303
         };
         let headroom = (2.0_f32).powf(stops.max(0.0));
-        Ok(headroom)
+        Ok(Some(headroom))
     }
 
     fn get_apple_gainmap_image(
@@ -85,7 +88,7 @@ impl ConvertRequest {
             // expected "urn:com:apple:photo:2020:aux:hdrgainmap"
             // as per <https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos>
             let aux_type = aux_handle.auxiliary_type()?;
-            debug!("heic-convert: handle type = {aux_type}");
+            trace!("heic-convert: handle type = {aux_type}");
             if aux_type != "urn:com:apple:photo:2020:aux:hdrgainmap" {
                 continue;
             }
@@ -96,7 +99,7 @@ impl ConvertRequest {
                 None,
             )?;
             debug!(
-                "heic-convert: aux image {} x {}",
+                "heic-convert: aux image (gainmap) {} x {}",
                 aux_image.width(),
                 aux_image.height()
             );
@@ -112,7 +115,6 @@ impl ConvertRequest {
     ) -> anyhow::Result<Vec<u8>> {
         let planes = apple_hdr_gainmap.planes();
         let hdr_gainmap = planes.y.context("hdr_gain planes y is None")?;
-        debug!("gainmap plane: size={}", hdr_gainmap.data.len());
         let (width, height) = (hdr_gainmap.width as usize, hdr_gainmap.height as usize);
         anyhow::ensure!(hdr_gainmap.storage_bits_per_pixel == 8);
         anyhow::ensure!(hdr_gainmap.data.len() == hdr_gainmap.stride * height);
@@ -149,7 +151,7 @@ impl ConvertRequest {
             Ok(writer)
         })
         .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
-        debug!("gainmap size = {}", jpg_bytes.len());
+        debug!("re-encoded gainmap jpg size = {}", jpg_bytes.len());
 
         Ok(jpg_bytes)
     }
@@ -184,7 +186,7 @@ impl ConvertRequest {
             let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_YCbCr);
 
             comp.set_size(w, h);
-            comp.set_quality(85.0);
+            comp.set_quality(95.0);
             let mut comp = comp.start_compress(Vec::new())?;
 
             // replace with your image data
@@ -204,42 +206,51 @@ impl ConvertRequest {
             Ok(writer)
         })
         .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
-        debug!("primary image size = {}", jpg.len());
+        debug!("re-encoded primary image size = {}", jpg.len());
 
         Ok(jpg)
     }
 
     fn convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
-        let apple_headroom = self.get_apple_headroom_from_exif(src)?;
-        debug!(%apple_headroom, "apple headroom");
-
         let profile = self
             .exif_tool()
             .get_value(src, "ProfileDescription")?
             .context("No profile description found")?;
-        debug!(%profile, "ProfileDescription");
+        trace!(%profile, "ProfileDescription");
         anyhow::ensure!(profile.starts_with("Display P3"));
-
+        // open image and decode
         let lib_heif = LibHeif::new();
         let ctx = HeifContext::read_from_file(src.to_str().unwrap())?;
         let handle = ctx.primary_image_handle()?;
         let (width, height) = (handle.width(), handle.height());
-        debug!(width, height, "heic-convert: file opened");
+        debug!(width, height, "heic-convert: heic file opened");
 
-        // decode
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
-        debug!("primary colorspace: {:?}", primary_colorspace);
+        trace!("primary colorspace: {:?}", primary_colorspace);
         let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
         let mut primary_image = Self::convert_primary_image_to_jpg(&primary_image)?;
 
+        // check if apple HDR
+        let apple_headroom = self.get_apple_headroom_from_exif(src)?;
+        debug!(?apple_headroom, "apple headroom");
+        let Some(apple_headroom) = apple_headroom else {
+            debug!("not apple HDR, skip ultra HDR");
+            std::fs::write(output, &primary_image)?;
+            return Ok(());
+        };
+
+        // write ultra HDR image
         let mut encoder = libultrahdr_rs::Encoder::new();
-        encoder.set_base_image_quality(85)?;
-        encoder.set_gainmap_image_quality(85)?;
+        encoder.set_base_image_quality(90)?;
+        encoder.set_gainmap_image_quality(90)?;
 
         let mut base_image = libultrahdr_rs::CompressedImage::from_bytes(&mut primary_image);
         *base_image.color_gamut_mut() = libultrahdr_rs::sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
-        encoder.set_compressed_base_image(base_image)?;
+        encoder
+            .set_compressed_base_image(base_image)
+            .context("cannot set base_image")?;
 
+        // get gainmap
         let apple_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;
         let mut gainmap_jpg = Self::create_gainmap_jpg(&apple_gainmap, apple_headroom)?;
         let gainmap_jpg_compressed = libultrahdr_rs::CompressedImage::from_bytes(&mut gainmap_jpg);
