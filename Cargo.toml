@@ -7,6 +7,10 @@ edition = "2021"
 path = "examples/main.rs"
 name = "main"
 
+[profile.release]
+lto = true
+strip = true
+
 [dependencies]
 anyhow = "1.0.95"
 tracing = "0.1.41"
