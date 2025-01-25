@@ -110,6 +110,7 @@ impl ConvertRequest {
 
     /// Returns encoded grayscale image
     fn create_gainmap_jpg(
+        &self,
         apple_hdr_gainmap: &libheif_rs::Image,
         apple_headroom: f32,
     ) -> anyhow::Result<turbojpeg::OwnedBuf> {
@@ -150,7 +151,7 @@ impl ConvertRequest {
         };
         let mut comp = turbojpeg::Compressor::new()?;
         comp.set_subsamp(turbojpeg::Subsamp::Gray)?;
-        comp.set_quality(95)?;
+        comp.set_quality(self.gainmap_quality)?;
         comp.set_optimize(false)?;
         let jpg = comp.compress_to_owned(image.as_deref())?;
 
@@ -168,7 +169,10 @@ impl ConvertRequest {
         }
     }
 
-    fn convert_primary_image_to_jpg(image: &libheif_rs::Image) -> Result<turbojpeg::OwnedBuf> {
+    fn convert_primary_image_to_jpg(
+        &self,
+        image: &libheif_rs::Image,
+    ) -> Result<turbojpeg::OwnedBuf> {
         let (w, h) = (image.width() as usize, image.height() as usize);
 
         let colorspace = image.color_space().context("no color space")?;
@@ -221,7 +225,7 @@ impl ConvertRequest {
         };
         let mut comp = turbojpeg::Compressor::new()?;
         comp.set_subsamp(turbojpeg::Subsamp::Sub2x2)?;
-        comp.set_quality(95)?;
+        comp.set_quality(self.image_quality)?;
         comp.set_optimize(false)?;
         let jpg = comp.compress_yuv_to_owned(image.as_deref())?;
 
@@ -247,21 +251,21 @@ impl ConvertRequest {
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
         trace!("primary colorspace: {:?}", primary_colorspace);
         let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
-        let mut primary_image = Self::convert_primary_image_to_jpg(&primary_image)?;
+        let mut primary_image = self.convert_primary_image_to_jpg(&primary_image)?;
 
         // check if apple HDR
         let apple_headroom = self.get_apple_headroom_from_exif(src)?;
         debug!(?apple_headroom, "apple headroom");
         let Some(apple_headroom) = apple_headroom else {
-            debug!("not apple HDR, skip ultra HDR");
+            debug!("not apple HDR, skip HDR");
             std::fs::write(output, &primary_image)?;
             return Ok(());
         };
 
         // write ultra HDR image
         let mut encoder = libultrahdr_rs::Encoder::new();
-        encoder.set_base_image_quality(90)?;
-        encoder.set_gainmap_image_quality(90)?;
+        encoder.set_base_image_quality(self.image_quality)?;
+        encoder.set_gainmap_image_quality(self.gainmap_quality)?;
 
         let mut base_image = libultrahdr_rs::CompressedImage::from_bytes(&mut primary_image);
         *base_image.color_gamut_mut() = libultrahdr_rs::sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
@@ -271,7 +275,7 @@ impl ConvertRequest {
 
         // get gainmap
         let apple_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;
-        let mut gainmap_jpg = Self::create_gainmap_jpg(&apple_gainmap, apple_headroom)?;
+        let mut gainmap_jpg = self.create_gainmap_jpg(&apple_gainmap, apple_headroom)?;
         let gainmap_jpg_compressed = libultrahdr_rs::CompressedImage::from_bytes(&mut gainmap_jpg);
         let metadata = libultrahdr_rs::GainmapMetadata {
             max_content_boost: [apple_headroom; 3],
