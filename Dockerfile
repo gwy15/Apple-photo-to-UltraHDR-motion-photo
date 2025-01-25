@@ -1,20 +1,23 @@
-FROM rust:bookworm
+FROM rust:bookworm AS builder
 WORKDIR /code
 COPY . /code
 
 RUN apt-get update && \
-    apt-get install -y build-essential apt-utils cmake clang
+    apt-get install -y build-essential apt-utils cmake clang && \
+    mkdir /pkg-config
 
-RUN /code/scripts/linux-build-libheif.sh /libheif && \
-    cmake --install /libheif/build && \
-    ldconfig
+RUN ./scripts/linux-build-libjpeg.sh /libjpeg /pkg-config && \
+    cmake --install /libjpeg/build
+RUN ./scripts/linux-build-libheif.sh /libheif /pkg-config && \
+    cmake --install /libheif/build
+RUN ./scripts/linux-build-libuhdr.sh /libuhdr /pkg-config && \
+    cmake --install /libuhdr/build
 
-RUN /code/scripts/linux-build-libuhdr.sh /libuhdr && \
-    cmake --install /libuhdr/build && \
-    ldconfig
+RUN env PKG_CONFIG_PATH=/pkg-config/lib/pkgconfig PKG_CONFIG_LIBDIR=/pkg-config/lib \
+        PKG_CONFIG_ALL_STATIC=true \
+    cargo build --example main --release
 
-RUN apt-get remove -y libheif1
-
-RUN ./scripts/linux-build-static.sh && \
-    ldd target/release/examples/main
-
+# runtime
+FROM debian:bookworm
+WORKDIR /code
+COPY --from=builder /code/target/release/examples/main ./main

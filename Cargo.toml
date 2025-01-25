@@ -22,6 +22,3 @@ mozjpeg = "0.10.12"
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 clap = { version = "4.5.26", features = ["derive"] }
-
-[build-dependencies]
-vcpkg = "0.2.15"
