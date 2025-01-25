@@ -52,18 +52,20 @@ Function Build-Uhdr {
 }
 
 Function Compile-Rust {
-    # $env:PKG_CONFIG_PATH = "$install/lib/pkgconfig"
-    # $env:PKG_CONFIG_LIBDIR = "$install/lib"
-    # $env:PKG_CONFIG_ALL_STATIC = "true"
-    # $env:UHDR_LIB_PATH = "$root/deps/libuhdr/build/Release"
+    $env:PKG_CONFIG_ALL_STATIC = "true"
+
+    # for uhd-sys, set precompiled lib
     $env:UHDR_LIB_PATH = "$install/lib"
     $env:UHDR_HEADER = "$install/include/ultrahdr_api.h"
-    $env:PATH = "$env:PATH;$env:UHDR_LIB_PATH;$root/deps/install/bin" # fixme: dynamically linked to jpeg62.dll
-    # $env:UHDR_STATIC = "true"
+
     # for turbojpeg-sys, set precompiled lib
     $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_STATIC = "1"
     $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_LIB_DIR = "$install/lib"
     $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_INCLUDE_DIR = "$install/include"
+
+    # fixme: dynamically linked to jpeg62.dll and turbojpeg.dll
+    $env:PATH = "$env:PATH;$env:UHDR_LIB_PATH;$root/deps/install/bin"
+
     cargo build --example main --release
     cargo run --example main --release
 }
