@@ -337,9 +337,9 @@ dependencies = [
 
 [[package]]
 name = "libultrahdr-sys"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a32639e8ce2e0c610bf4be453c30a0b1d556a358ec0ac8dacd5d1e0b1b7a739"
+checksum = "f51310377c94e91334c7e3cad618bb8d8be672effad0e1d02565221135bf6b82"
 dependencies = [
  "bindgen",
  "pkg-config",
