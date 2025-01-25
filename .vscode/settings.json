@@ -3,6 +3,7 @@
         "colorspace",
         "exif",
         "exiftool",
+        "turbojpeg",
         "uhdr",
         "ultrahdr"
     ]

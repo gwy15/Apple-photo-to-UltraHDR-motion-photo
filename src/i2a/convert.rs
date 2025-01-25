@@ -112,7 +112,7 @@ impl ConvertRequest {
     fn create_gainmap_jpg(
         apple_hdr_gainmap: &libheif_rs::Image,
         apple_headroom: f32,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<turbojpeg::OwnedBuf> {
         let planes = apple_hdr_gainmap.planes();
         let hdr_gainmap = planes.y.context("hdr_gain planes y is None")?;
         let (width, height) = (hdr_gainmap.width as usize, hdr_gainmap.height as usize);
@@ -141,19 +141,22 @@ impl ConvertRequest {
             }
         }
 
-        let jpg_bytes = std::panic::catch_unwind(|| -> std::io::Result<Vec<u8>> {
-            let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_GRAYSCALE);
-            comp.set_quality(85.0);
-            comp.set_size(width, height);
-            let mut comp = comp.start_compress(Vec::new())?;
-            comp.write_scanlines(&ultradr_data)?;
-            let writer = comp.finish()?;
-            Ok(writer)
-        })
-        .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
-        debug!("re-encoded gainmap jpg size = {}", jpg_bytes.len());
+        let image = turbojpeg::Image {
+            pixels: ultradr_data,
+            width,
+            pitch: width,
+            height,
+            format: turbojpeg::PixelFormat::GRAY,
+        };
+        let mut comp = turbojpeg::Compressor::new()?;
+        comp.set_subsamp(turbojpeg::Subsamp::Gray)?;
+        comp.set_quality(95)?;
+        comp.set_optimize(false)?;
+        let jpg = comp.compress_to_owned(image.as_deref())?;
 
-        Ok(jpg_bytes)
+        debug!("re-encoded gainmap jpg size = {}", jpg.len());
+
+        Ok(jpg)
     }
 
     #[inline]
@@ -165,7 +168,7 @@ impl ConvertRequest {
         }
     }
 
-    fn convert_primary_image_to_jpg(image: &libheif_rs::Image) -> Result<Vec<u8>> {
+    fn convert_primary_image_to_jpg(image: &libheif_rs::Image) -> Result<turbojpeg::OwnedBuf> {
         let (w, h) = (image.width() as usize, image.height() as usize);
 
         let colorspace = image.color_space().context("no color space")?;
@@ -182,30 +185,46 @@ impl ConvertRequest {
         anyhow::ensure!(cb.width == w as u32 / 2);
         anyhow::ensure!(cb.height == h as u32 / 2);
 
-        let jpg = std::panic::catch_unwind(|| -> std::io::Result<Vec<u8>> {
-            let mut comp = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_YCbCr);
+        let (w2, h2) = (w.div_ceil(2), h.div_ceil(2));
+        let (w1, h1) = (w2 * 2, h2 * 2);
+        // Y: (w1 x h1), CbCr: (w2 x h2)
+        let mut tj_buffer = Vec::with_capacity(w1 * h1 + 2 * w2 * h2);
 
-            comp.set_size(w, h);
-            comp.set_quality(95.0);
-            let mut comp = comp.start_compress(Vec::new())?;
-
-            // replace with your image data
-            let mut scanline = vec![0u8; w * 3];
-            for i in 0..h {
-                for j in 0..w {
-                    let index = i * y.stride + j;
-                    scanline[j * 3] = y.data[index];
-                    let index = i / 2 * cb.stride + j / 2;
-                    scanline[j * 3 + 1] = cb.data[index];
-                    scanline[j * 3 + 2] = cr.data[index];
+        macro_rules! fill_turbojpeg {
+            ($src:ident => $target:ident, $target_w:expr, $target_h:expr) => {{
+                let (src_w, src_h, src_stride) = (
+                    $src.width as usize,
+                    $src.height as usize,
+                    $src.stride as usize,
+                );
+                anyhow::ensure!(src_w <= $target_w);
+                anyhow::ensure!(src_h <= $target_h);
+                for i in 0..src_h {
+                    let idx = i * src_stride;
+                    $target.extend_from_slice(&$src.data[idx..idx + src_w]);
+                    (src_w..$target_w).for_each(|_| $target.push(0));
                 }
-                comp.write_scanlines(&scanline)?;
-            }
+                (src_h..$target_h)
+                    .for_each(|_| $target.extend(std::iter::repeat(0).take($target_w)));
+            }};
+        }
+        fill_turbojpeg!(y => tj_buffer, w1, h1);
+        fill_turbojpeg!(cb => tj_buffer, w2, h2);
+        fill_turbojpeg!(cr => tj_buffer, w2, h2);
 
-            let writer = comp.finish()?;
-            Ok(writer)
-        })
-        .map_err(|_| anyhow::anyhow!("mozjpeg failed"))??;
+        let image = turbojpeg::YuvImage {
+            pixels: tj_buffer,
+            width: w,
+            align: 1,
+            height: h,
+            subsamp: turbojpeg::Subsamp::Sub2x2,
+        };
+        let mut comp = turbojpeg::Compressor::new()?;
+        comp.set_subsamp(turbojpeg::Subsamp::Sub2x2)?;
+        comp.set_quality(95)?;
+        comp.set_optimize(false)?;
+        let jpg = comp.compress_yuv_to_owned(image.as_deref())?;
+
         debug!("re-encoded primary image size = {}", jpg.len());
 
         Ok(jpg)

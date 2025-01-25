@@ -7,7 +7,7 @@ Converts Apple's photos to ultra HDR photos, keeping HDR effect and motion photo
 ## Build
 
 Depends on several packages:
-- libjpegturbo
+- libclang (compile time only)
 - libheif
-- libultrahdr
-- libclang
+- libultrahdr -> libjpeg (dummy for libturbojpeg)
+- libturbojpeg
