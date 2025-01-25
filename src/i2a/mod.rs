@@ -27,12 +27,20 @@ impl ConvertRequest {
         self.append_video()?;
         self.update_exif()?;
         Self::sync_file_times(&self.video_path, &self.output_path)?;
+
+        let output_size = self
+            .output_path
+            .metadata()
+            .context("Output is gone??")?
+            .len() as f32
+            / 1024.0
+            / 1024.0;
         info!(
-            "convert success in {:?}: {} + {} => {}",
+            "convert success in {:?}: {} + {} => {} (size={output_size:.2} MiB)",
             t.elapsed(),
             self.image_path.display(),
             self.video_path.display(),
-            self.output_path.display()
+            self.output_path.display(),
         );
 
         Ok(())
