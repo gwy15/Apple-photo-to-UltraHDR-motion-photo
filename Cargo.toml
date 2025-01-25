@@ -23,6 +23,7 @@ libheif-rs = "1.1.0"
 libultrahdr-rs = "0.1.0"
 turbojpeg = { version = "1.2.1", default-features = false }
 turbojpeg-sys = { version = "1", default-features = false }
+rayon = "1.10.0"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }

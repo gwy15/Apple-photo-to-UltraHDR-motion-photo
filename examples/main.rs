@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use rayon::prelude::*;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -18,6 +19,10 @@ pub struct Args {
     #[clap(short = 'e', long)]
     /// Path to the exiftool executable.
     pub exiftool: Option<PathBuf>,
+
+    #[clap(short = 'j', long)]
+    /// Run in parallel mode
+    pub parallel: bool,
 
     #[clap(short = 'o', long, value_enum)]
     /// What to do with the original files.
@@ -39,11 +44,15 @@ pub struct Args {
     /// Gainmap quality. Default: 85
     pub gainmap_quality: i32,
 
+    #[clap(long)]
+    /// Strict mode: exit on multiple images / videos with same name.
+    pub strict: bool,
+
     #[clap(short = 'v', long)]
     /// Print more detailed runtime information
     pub verbose: bool,
 }
-#[derive(clap::ValueEnum, Clone, PartialEq)]
+#[derive(clap::ValueEnum, Clone, Copy, PartialEq)]
 pub enum Original {
     Keep,
     Delete,
@@ -123,6 +132,9 @@ impl Args {
             for path in found_image {
                 warn!("    - {}", path.display());
             }
+            if self.strict {
+                std::process::exit(1);
+            }
             return Ok(());
         }
         let image_path = found_image.pop().unwrap();
@@ -146,6 +158,9 @@ impl Args {
             for path in found_video {
                 warn!("    - {}", path.display());
             }
+            if self.strict {
+                std::process::exit(1);
+            }
             return Ok(());
         }
         let video_path = found_video.pop().unwrap();
@@ -161,6 +176,15 @@ impl Args {
         });
         Ok(())
     }
+}
+
+fn run(task: Task, original: Original) -> Result<()> {
+    task.convert()
+        .with_context(|| format!("Task failed for {task:#?}"))?;
+    if original == Original::Delete {
+        task.delete_original()?;
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -194,16 +218,23 @@ fn main() -> Result<()> {
     span.pb_set_length(tasks.len() as u64);
     let guard = span.enter();
     let t = std::time::Instant::now();
-    for task in tasks {
-        task.convert()
-            .with_context(|| format!("Task failed for {task:#?}"))?;
 
-        if args.original == Original::Delete {
-            task.delete_original()?;
+    if args.parallel {
+        tasks
+            .into_par_iter()
+            .map(|task| {
+                run(task, args.original)?;
+                span.pb_inc(1);
+                Ok(())
+            })
+            .collect::<Result<Vec<_>>>()?;
+    } else {
+        for task in tasks {
+            run(task, args.original)?;
+            span.pb_inc(1);
         }
-
-        Span::current().pb_inc(1);
     }
+
     drop(guard);
     info!("All tasks completed in {:?}", t.elapsed());
 
