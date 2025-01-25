@@ -49,20 +49,23 @@ Function Build-Uhdr {
 }
 
 Function Compile-Rust {
-    $env:PKG_CONFIG_PATH = "$install/lib/pkgconfig"
-    $env:PKG_CONFIG_LIBDIR = "$install/lib"
-    $env:PKG_CONFIG_ALL_STATIC = "true"
-    $env:UHDR_LIB_PATH = "$install/lib"
+    # $env:PKG_CONFIG_PATH = "$install/lib/pkgconfig"
+    # $env:PKG_CONFIG_LIBDIR = "$install/lib"
+    # $env:PKG_CONFIG_ALL_STATIC = "true"
+    $env:UHDR_LIB_PATH = "$root/deps/libuhdr/build/Release"
     $env:UHDR_HEADER = "$install/include/ultrahdr_api.h"
-    $env:UHDR_STATIC = "true"
-    $env:TURBOJPEG_LIB_DIR = "$install/lib"
-    $env:TURBOJPEG_INCLUDE_DIR = "$install/include"
-    $env:TURBOJPEG_STATIC = "true"
+    $env:PATH = "$env:PATH;$env:UHDR_LIB_PATH"
+    # $env:UHDR_STATIC = "true"
+    # $env:TURBOJPEG_LIB_DIR = "$install/lib"
+    # $env:TURBOJPEG_INCLUDE_DIR = "$install/include"
+    # $env:TURBOJPEG_STATIC = "true"
     cargo build --example main --release
+    cargo run --example main --release
 }
 
 # Build-Jpeg
 # Build-Heif
-# Build-Uhdr
+# vcpkg install libheif --triplet x64-windows-static-md
+Build-Uhdr
 Compile-Rust
 
