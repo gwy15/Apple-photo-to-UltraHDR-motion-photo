@@ -25,6 +25,9 @@ impl ConvertRequest {
         if self.output_path.is_dir() {
             bail!("Output path is a directory");
         }
+        if !self.io_same_file() && self.output_path.exists() {
+            bail!("Output file already exists");
+        }
         let parent = self
             .output_path
             .parent()
