@@ -130,13 +130,18 @@ impl ConvertRequest {
                 let index = i * hdr_gainmap.stride + j;
                 let u = hdr_gainmap.data[index] as f32 / 255.0;
                 // transform encoded hdr gainmap to linear value by applying reverse sRGB transform
-                let hdr_gainmap_linear = Self::reverse_srgb_transform(u);
-                // As per <https://developer.android.com/media/platform/hdr-image-format#encode>,
+                let apple_gainmap_linear = Self::reverse_srgb_transform(u); // [0, 1]
+
+                // As per <https://developer.android.com/media/platform/hdr-image-format#encode>
+                // and <https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos>
                 // we choose offset_hdr = offset_sdr = 0,
                 // min_content_boost = 1.0, max_content_boost = apple_headroom
-                // Thus we have log_recovery = log(apple_headroom, pixel_gain)
-                //                           = log(hr, 1 + (hr - 1) * gainmap_linear)
-                let log_recovery = (1.0 + hr_1 * hdr_gainmap_linear).ln() / log_hr;
+                //
+                // Thus we have log_recovery = (log2(pixel_gain) - log2(1)) / (log2(max_content_boost) - log2(1))
+                //                           = log2(pixel_gain) / log2(apple_headroom)
+                //                           = ln(pixel_gain) / ln(apple_headroom)
+                //                           = ln(1 + (hr - 1) * gainmap_linear) / ln(apple_headroom)
+                let log_recovery = (1.0 + hr_1 * apple_gainmap_linear).ln() / log_hr;
                 // we choose map_gamma = 1.0
                 let recovery = log_recovery.clamp(0.0, 1.0);
                 let encoded_recovery = (recovery * 255.0 + 0.5).floor() as u8;
