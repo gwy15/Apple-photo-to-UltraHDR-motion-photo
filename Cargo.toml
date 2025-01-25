@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [[example]]
+path = "examples/simple.rs"
+name = "simple"
+
+[[example]]
 path = "examples/main.rs"
 name = "main"
 
@@ -23,3 +27,5 @@ turbojpeg-sys = { version = "1", default-features = false }
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 clap = { version = "4.5.26", features = ["derive"] }
+indicatif = "0.17.9"
+tracing-indicatif = "0.3.9"

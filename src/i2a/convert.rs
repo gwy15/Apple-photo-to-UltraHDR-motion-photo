@@ -80,6 +80,7 @@ impl ConvertRequest {
         Ok(Some(headroom))
     }
 
+    #[tracing::instrument(skip_all)]
     fn get_apple_gainmap_image(
         lib_heif: &libheif_rs::LibHeif,
         handle: &libheif_rs::ImageHandle,
@@ -109,6 +110,7 @@ impl ConvertRequest {
     }
 
     /// Returns encoded grayscale image
+    #[tracing::instrument(skip_all)]
     fn create_gainmap_jpg(
         &self,
         apple_hdr_gainmap: &libheif_rs::Image,
@@ -169,6 +171,7 @@ impl ConvertRequest {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     fn convert_primary_image_to_jpg(
         &self,
         image: &libheif_rs::Image,
@@ -234,24 +237,29 @@ impl ConvertRequest {
         Ok(jpg)
     }
 
+    #[tracing::instrument(skip_all)]
     fn convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
-        let profile = self
-            .exif_tool()
-            .get_value(src, "ProfileDescription")?
-            .context("No profile description found")?;
-        trace!(%profile, "ProfileDescription");
-        anyhow::ensure!(profile.starts_with("Display P3"));
+        let profile = self.exif_tool().get_value(src, "ProfileDescription")?;
+        if let Some(profile) = profile.as_ref() {
+            anyhow::ensure!(profile.starts_with("Display P3"));
+        }
+        trace!(?profile, "ProfileDescription");
         // open image and decode
+        let span = info_span!("decode heic");
+        let guard = span.enter();
         let lib_heif = LibHeif::new();
         let ctx = HeifContext::read_from_file(src.to_str().unwrap())?;
         let handle = ctx.primary_image_handle()?;
         let (width, height) = (handle.width(), handle.height());
-        debug!(width, height, "heic-convert: heic file opened");
-
+        debug!(width, height, "heic-convert: heic file opened, decoding");
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
         trace!("primary colorspace: {:?}", primary_colorspace);
         let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
-        let mut primary_image = self.convert_primary_image_to_jpg(&primary_image)?;
+        debug!("primary image decoded, {width} x {height}");
+        drop(guard);
+
+        let mut primary_image = info_span!("encoding sdr to jpg")
+            .in_scope(|| self.convert_primary_image_to_jpg(&primary_image))?;
 
         // check if apple HDR
         let apple_headroom = self.get_apple_headroom_from_exif(src)?;
@@ -261,6 +269,10 @@ impl ConvertRequest {
             std::fs::write(output, &primary_image)?;
             return Ok(());
         };
+        anyhow::ensure!(
+            profile.is_some(),
+            "Apple headroom found, but ProfileDescription not found in exif"
+        );
 
         // write ultra HDR image
         let mut encoder = libultrahdr_rs::Encoder::new();
@@ -289,7 +301,7 @@ impl ConvertRequest {
         };
         encoder.set_gainmap_image(gainmap_jpg_compressed, metadata)?;
 
-        encoder.encode().context("encode failed")?;
+        info_span!("libuhdr encoding").in_scope(|| encoder.encode().context("encode failed"))?;
         let output_img = encoder.get_encoded_stream().context("no encoded stream")?;
 
         std::fs::write(output, output_img.as_bytes())?;

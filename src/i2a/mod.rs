@@ -4,6 +4,7 @@ use std::path::PathBuf;
 mod convert;
 mod merge;
 
+#[derive(Debug)]
 pub struct ConvertRequest {
     pub image_path: PathBuf,
     pub video_path: PathBuf,
@@ -18,14 +19,30 @@ pub struct ConvertRequest {
 }
 
 impl ConvertRequest {
-    pub fn execute(self) -> anyhow::Result<()> {
+    /// Input and output is same file
+    pub fn io_same_file(&self) -> bool {
+        self.image_path
+            .as_os_str()
+            .eq_ignore_ascii_case(self.output_path.as_os_str())
+    }
+
+    pub fn convert(&self) -> anyhow::Result<()> {
+        info!(
+            "Running convert request {} + {} => {}",
+            self.image_path.display(),
+            self.video_path.display(),
+            self.output_path.display(),
+        );
         let t = std::time::Instant::now();
         self.check_valid().context("request arguments invalid")?;
 
         // only heic is supported
-        let converted = self.ensure_jpg()?;
+        let converted = self.ensure_jpg().context("ensure_jpg failed")?;
         if !converted {
-            self.copy_image()?;
+            let same = self.io_same_file();
+            if !same {
+                self.copy_image()?;
+            }
         }
         debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
 
@@ -48,6 +65,14 @@ impl ConvertRequest {
             self.output_path.display(),
         );
 
+        Ok(())
+    }
+
+    pub fn delete_original(&self) -> anyhow::Result<()> {
+        if !self.io_same_file() {
+            std::fs::remove_file(&self.image_path).context("delete original image failed")?;
+        }
+        std::fs::remove_file(&self.video_path).context("delete original video failed")?;
         Ok(())
     }
 
