@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod convert;
 mod merge;
+mod utils;
 
 #[derive(Debug)]
 pub struct ConvertRequest {
@@ -27,7 +28,7 @@ impl ConvertRequest {
     }
 
     pub fn convert(&self) -> anyhow::Result<()> {
-        info!(
+        debug!(
             "Running convert request {} + {} => {}",
             self.image_path.display(),
             self.video_path.display(),
@@ -36,14 +37,22 @@ impl ConvertRequest {
         let t = std::time::Instant::now();
         self.check_valid().context("request arguments invalid")?;
 
-        // only heic is supported
-        let converted = self.ensure_jpg().context("ensure_jpg failed")?;
-        if !converted {
-            let same = self.io_same_file();
-            if !same {
+        // if input == output == *.jpg, skip
+        if !self.io_same_file() {
+            // only heic is supported
+            let converted = self
+                .ensure_jpg()
+                .with_context(|| format!("ensure_jpg failed: {}", self.image_path.display()))?;
+            if !converted {
                 self.copy_image()?;
             }
         }
+        // in case rest failed, remove generated output
+        let mut guard = utils::Guard::new(|| {
+            if !self.io_same_file() {
+                std::fs::remove_file(&self.output_path).ok();
+            }
+        });
         debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
 
         self.append_video()?;
@@ -58,13 +67,14 @@ impl ConvertRequest {
             / 1024.0
             / 1024.0;
         info!(
-            "convert success in {:?}: {} + {} => {} (size={output_size:.2} MiB)",
+            "convert success in {:.2?}: {} + {} => {} (size={output_size:.2} MiB)",
             t.elapsed(),
             self.image_path.display(),
             self.video_path.display(),
             self.output_path.display(),
         );
 
+        guard.cancel();
         Ok(())
     }
 
