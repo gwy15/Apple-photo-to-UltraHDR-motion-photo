@@ -189,8 +189,8 @@ impl ConvertRequest {
         let cb = planes.cb.context("no cb")?;
         let cr = planes.cr.context("no cr")?;
 
-        anyhow::ensure!(cb.width == w as u32 / 2);
-        anyhow::ensure!(cb.height == h as u32 / 2);
+        anyhow::ensure!(cb.width == w.div_ceil(2) as u32);
+        anyhow::ensure!(cb.height == h.div_ceil(2) as u32);
 
         let (w2, h2) = (w.div_ceil(2), h.div_ceil(2));
         let (w1, h1) = (w2 * 2, h2 * 2);
