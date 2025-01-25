@@ -11,3 +11,51 @@ Depends on several packages:
 - libheif
 - libultrahdr -> libjpeg (dummy for libturbojpeg)
 - libturbojpeg
+
+### Build on Linux
+See `scripts/ghw-build.sh`
+
+### Build on Windows
+vcpkg required.
+
+See `scripts/windows-build.ps1`
+
+### Build on Mac
+See `scripts/ghw-build.sh`
+
+## Usage
+```
+Usage: main.exe [OPTIONS] --original <ORIGINAL> <PATH>
+
+Arguments:
+  <PATH>  Path to the directory containing images and videos to convert
+
+Options:
+  -e, --exiftool <EXIFTOOL>
+          Path to the exiftool executable
+  -j, --parallel
+          Run in parallel mode
+  -o, --original <ORIGINAL>
+          What to do with the original files [possible values: keep, delete]
+      --image-extensions <IMAGE_EXTENSIONS>
+          Image extensions. Default: "heic,jpg,jpeg"
+      --video-extensions <VIDEO_EXTENSIONS>
+          Video extensions. Default: "mov,mp4"
+  -q, --image-quality <IMAGE_QUALITY>
+          Image quality. Default: 85 [default: 85]
+  -g, --gainmap-quality <GAINMAP_QUALITY>
+          Gainmap quality. Default: 85 [default: 85]
+      --strict
+          Strict mode: exit on multiple images / videos with same name
+  -v, --verbose
+          Print more detailed runtime information
+  -h, --help
+          Print help
+```
+
+## Example
+```bash
+main d:\tmp\iPhone -o delete -e 'c:\Program Files\exiftool\exiftool.exe' -j --strict
+# i.e.,
+main d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exiftool\exiftool.exe' -j --strict
+```
