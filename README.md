@@ -13,15 +13,15 @@ Depends on several packages:
 - libturbojpeg
 
 ### Build on Linux
-See `scripts/ghw-build.sh`
+See `scripts/ghw-build.sh` or workflow file.
 
 ### Build on Windows
-vcpkg required.
+vcpkg and VS required.
 
-See `scripts/windows-build.ps1`
+See `scripts/windows-build.ps1` or workflow file.
 
 ### Build on Mac
-See `scripts/ghw-build.sh`
+See `scripts/ghw-build.sh` or workflow file.
 
 ## Usage
 ```
@@ -59,3 +59,6 @@ main d:\tmp\iPhone -o delete -e 'c:\Program Files\exiftool\exiftool.exe' -j --st
 # i.e.,
 main d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exiftool\exiftool.exe' -j --strict
 ```
+
+## Known problems
+- [ ] Audio in motion photos does not work, at least on my Xiaomi phone.
