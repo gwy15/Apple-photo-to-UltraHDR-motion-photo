@@ -145,7 +145,7 @@ jobs:
 
       - name: Compile Rust
         run: |
-          export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
+          export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig):$(realpath pkg-config/lib)
           export PKG_CONFIG_LIBDIR=$(realpath pkg-config/lib)
           export PKG_CONFIG_ALL_STATIC=true
           export TURBOJPEG_STATIC=1
