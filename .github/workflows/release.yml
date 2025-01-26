@@ -203,6 +203,7 @@ jobs:
       - name: Build libjpeg
         run: |
           . ./scripts/windows-build.ps1
+          Build-Jpeg
 
       - name: Build libultrahdr
         run: |
