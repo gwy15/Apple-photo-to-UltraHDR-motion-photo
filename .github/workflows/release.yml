@@ -84,7 +84,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ./build/release/examples/main
+          path: ./target/release/examples/main
           if-no-files-found: error
           retention-days: 1
 
@@ -156,7 +156,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ./build/release/examples/main
+          path: ./target/release/examples/main
           if-no-files-found: error
           retention-days: 1
 
@@ -190,6 +190,7 @@ jobs:
         uses: actions/cache@v4.2.0
         with:
           path: |
+            c:/vcpkg
             deps
             pkg-config
           key: ${{ runner.os }}-${{ runner.arch }}-deps
@@ -202,7 +203,6 @@ jobs:
       - name: Build libjpeg
         run: |
           . ./scripts/windows-build.ps1
-          Build-Jpeg
 
       - name: Build libultrahdr
         run: |
@@ -218,7 +218,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ./build/release/examples/main.exe
+          path: ./target/release/examples/main.exe
           if-no-files-found: error
           retention-days: 1
 
