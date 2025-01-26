@@ -70,8 +70,8 @@ Function Compile-Rust {
     # cargo run --example main --release
 }
 
-Build-Heif
-Build-Jpeg
-Build-Uhdr
-Compile-Rust
+#Build-Heif
+#Build-Jpeg
+#Build-Uhdr
+#Compile-Rust
 

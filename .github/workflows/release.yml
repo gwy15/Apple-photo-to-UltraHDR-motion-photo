@@ -1,0 +1,256 @@
+name: Release
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+  #schedule:
+  #  - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag name for release"
+        required: false
+        default: nightly
+
+jobs:
+  Linux:
+    name: "Build Linux Release"
+    runs-on: ${{ matrix.runner.os }}
+    strategy:
+      matrix:
+        runner:
+          # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
+          - { os: ubuntu-24.04, arch: x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt install -y build-essential apt-utils cmake clang
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Setup directories
+        run: |
+          mkdir -p deps
+          mkdir -p pkg-config
+
+      - name: Cache deps
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
+
+      - name: Build and Install libjpeg
+        run: |
+          ./scripts/linux-build-libjpeg.sh deps pkg-config
+          cmake --install deps/libjpeg/build
+
+      - name: Build and install libde265
+        run: |
+          ./scripts/linux-build-libde265.sh deps pkg-config
+          cmake --install deps/libde265/build
+
+      - name: Build and install libheif
+        run: |
+          ./scripts/linux-build-libheif.sh deps pkg-config
+          cmake --install deps/libheif/build
+
+      - name: Build and install libuhdr
+        run: |
+          ./scripts/linux-build-libuhdr.sh deps pkg-config
+          cmake --install deps/libuhdr/build
+
+      - name: Compile Rust
+        run: |
+          export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
+          export PKG_CONFIG_LIBDIR=$(realpath pkg-config/lib)
+          export PKG_CONFIG_ALL_STATIC=true
+          export TURBOJPEG_STATIC=1
+          export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
+          export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
+          cargo build --example main --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
+          path: ./target/release/examples/main
+          if-no-files-found: error
+          retention-days: 1
+
+  macOS:
+    name: "Build macOS Release"
+    runs-on: ${{ matrix.runner.os }}
+    strategy:
+      matrix:
+        runner:
+          # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
+          - { os: macos-13, arch: intel }
+          - { os: macos-14, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Setup directories
+        run: |
+          mkdir -p deps
+          mkdir -p pkg-config
+
+      - name: Cache deps
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
+
+      - name: Build and Install libjpeg
+        run: |
+          ./scripts/linux-build-libjpeg.sh deps pkg-config
+          cmake --install deps/libjpeg/build
+
+      - name: Build and install libde265
+        run: |
+          ./scripts/linux-build-libde265.sh deps pkg-config
+          cmake --install deps/libde265/build
+
+      - name: Build and install libheif
+        run: |
+          ./scripts/linux-build-libheif.sh deps pkg-config
+          cmake --install deps/libheif/build
+
+      - name: Build and install libuhdr
+        run: |
+          ./scripts/linux-build-libuhdr.sh deps pkg-config
+          cmake --install deps/libuhdr/build
+
+      - name: Compile Rust
+        run: |
+          export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig):$(realpath pkg-config/lib)
+          export PKG_CONFIG_LIBDIR=$(realpath pkg-config/lib)
+          export PKG_CONFIG_ALL_STATIC=true
+          export TURBOJPEG_STATIC=1
+          export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
+          export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
+          cargo build --example main --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
+          path: ./target/release/examples/main
+          if-no-files-found: error
+          retention-days: 1
+
+  Windows:
+    name: "Build Windows Release"
+    runs-on: ${{ matrix.runner.os }}
+    strategy:
+      matrix:
+        runner:
+          - { os: windows-2022, arch: x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Visual Studio shell
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Set up vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          C:/vcpkg/bootstrap-vcpkg.bat
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Cache
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            c:/vcpkg
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
+
+      - name: Install libheif
+        run: |
+          . ./scripts/windows-build.ps1
+          vcpkg install libheif --triplet x64-windows-static-md
+
+      - name: Build libjpeg
+        run: |
+          . ./scripts/windows-build.ps1
+          Build-Jpeg
+
+      - name: Build libultrahdr
+        run: |
+          . ./scripts/windows-build.ps1
+          Build-Uhdr
+      
+      - name: Compile Rust
+        run: |
+          $env:VCPKG_ROOT="C:\vcpkg"
+          . ./scripts/windows-build.ps1
+          Compile-Rust
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-${{ matrix.runner.arch }}-${{ matrix.runner.os }}
+          path: ./target/release/examples/main.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [Linux, macOS, Windows]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - if: github.event_name == 'workflow_dispatch'
+        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+
+      - if: github.event_name == 'schedule'
+        run: echo 'TAG_NAME=nightly' >> $GITHUB_ENV
+
+      - if: github.event_name == 'push'
+        run: |
+          TAG_NAME=${{ github.ref }}
+          echo "TAG_NAME=${TAG_NAME#refs/tags/}" >> $GITHUB_ENV
+
+      - uses: actions/download-artifact@v4
+      - name: List downloaded files
+        run: tree -L 3
+
+      - uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # needs newer release, but add it once available
+          #fail_on_unmatched_files: true
+          body: ${{ env.BODY }}
+          prerelease: ${{ env.TAG_NAME == 'nightly' }}
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ./main-*/main-*
