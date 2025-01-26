@@ -253,4 +253,4 @@ jobs:
           prerelease: ${{ env.TAG_NAME == 'nightly' }}
           tag_name: ${{ env.TAG_NAME }}
           files: |
-            ./main-*/main-*
+            ./main-*/main
