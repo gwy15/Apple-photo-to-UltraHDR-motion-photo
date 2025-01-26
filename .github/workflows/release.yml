@@ -4,8 +4,9 @@ concurrency:
   cancel-in-progress: true
 on:
   push:
-    tags:
-      - v[0-9]+.[0-9]+.[0-9]+
+  # push:
+  #   tags:
+  #     - v[0-9]+.[0-9]+.[0-9]+
   #schedule:
   #  - cron: '30 4 * * *'
   workflow_dispatch:
@@ -40,6 +41,14 @@ jobs:
         run: |
           mkdir -p deps
           mkdir -p pkg-config
+
+      - name: Cache
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
 
       - name: Build and Install libjpeg
         run: |
@@ -107,6 +116,14 @@ jobs:
           mkdir -p deps
           mkdir -p pkg-config
 
+      - name: Cache
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
+
       - name: Build and Install libjpeg
         run: |
           ./scripts/linux-build-libjpeg.sh deps pkg-config
@@ -160,6 +177,20 @@ jobs:
 
       - name: Set up vcpkg
         uses: microsoft/setup-vcpkg@v1
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Cache
+        uses: actions/cache@v4.2.0
+        with:
+          path: |
+            deps
+            pkg-config
+          key: ${{ runner.os }}-${{ runner.arch }}-deps
 
       - name: Build script
         run: |
