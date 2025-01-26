@@ -5,7 +5,7 @@ install=$(realpath "${2:-/usr/local}")
 echo "Building libjpeg in $path"
 if [ ! -d "$path" ]; then
     mkdir $path
-    git clone https://github.com/libjpeg-turbo/libjpeg-turbo.git $path
+    git clone --depth 1 --branch 3.1.0 https://github.com/libjpeg-turbo/libjpeg-turbo.git $path
 fi
 build=$path/build
 if [ ! -d "$build" ]; then
