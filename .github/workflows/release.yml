@@ -213,11 +213,16 @@ jobs:
           . ./scripts/windows-build.ps1
           Compile-Rust
           cp target/release/examples/main.exe main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.exe
+          cp deps/install/bin/turbojpeg.dll ./
+          cp deps/install/bin/jpeg62.dll ./
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
-          path: main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.exe
+          path: |
+            main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.exe
+            ./*.dll
+
           if-no-files-found: error
           retention-days: 1
 
