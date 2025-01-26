@@ -1,16 +1,20 @@
 #!/bin/bash
 set -ex
 scripts=$(realpath "$(dirname $0)")
-install=$(realpath ../pkg-config)
+root=/workspaces
+install=$root/pkg-config
 
-$scripts/linux-build-libjpeg.sh /workspaces/libjpeg $install
-sudo cmake --install /workspaces/libjpeg/build
+$scripts/linux-build-libjpeg.sh $root $install
+sudo cmake --install $root/libjpeg/build
 
-$scripts/linux-build-libheif.sh /workspaces/libheif $install
-sudo cmake --install /workspaces/libheif/build
+$scripts/linux-build-libde265.sh $root $install
+sudo cmake --install $root/libde265/build
 
-$scripts/linux-build-libuhdr.sh /workspaces/libuhdr $install
-sudo cmake --install /workspaces/libuhdr/build
+$scripts/linux-build-libheif.sh $root $install
+sudo cmake --install $root/libheif/build
+
+$scripts/linux-build-libuhdr.sh $root $install
+sudo cmake --install $root/libuhdr/build
 
 env PKG_CONFIG_PATH=$install/lib/pkgconfig PKG_CONFIG_LIBDIR=$install/lib \
     PKG_CONFIG_ALL_STATIC=true \
