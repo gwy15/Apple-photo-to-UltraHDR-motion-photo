@@ -256,3 +256,4 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ./main*
+            ./*/main*
