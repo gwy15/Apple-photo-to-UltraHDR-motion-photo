@@ -236,6 +236,8 @@ jobs:
           echo "TAG_NAME=${TAG_NAME#refs/tags/}" >> $GITHUB_ENV
 
       - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: false
 
       - name: List downloaded files
         run: tree -L 3
@@ -250,4 +252,5 @@ jobs:
           prerelease: ${{ env.TAG_NAME == 'nightly' }}
           tag_name: ${{ env.TAG_NAME }}
           files: |
+            ./*.zip
             ./*/*.zip
