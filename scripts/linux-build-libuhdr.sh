@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 root=$(realpath "${1:-/}")
-path=$(realpath $root/libuhdr)
+path=$root/libuhdr
 install=$(realpath "${2:-/opt/pkg-config}")
 echo "Building libuhdr in $path"
 if [ ! -d "$path" ]; then

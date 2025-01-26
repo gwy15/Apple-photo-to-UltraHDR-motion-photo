@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 root=$(realpath "${1:-/}")
-path=$(realpath $root/libde265)
+path=$root/libde265
 install=$(realpath "${2:-/opt/pkg-config}")
 echo "Building libheif in $path"
 if [ ! -d "$path" ]; then

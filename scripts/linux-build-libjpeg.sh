@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 root=$(realpath "${1:-/}")
-path=$(realpath $root/libjpeg)
+path=$root/libjpeg
 install=$(realpath "${2:-/opt/pkg-config}")
 echo "Building libjpeg in $path"
 if [ ! -d "$path" ]; then
