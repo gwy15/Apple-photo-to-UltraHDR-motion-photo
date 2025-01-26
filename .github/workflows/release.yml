@@ -79,12 +79,12 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cp target/release/examples/main main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}
+          cp target/release/examples/main main-linux-${{ matrix.runner.arch }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
-          path: main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}
+          path: main-linux-${{ matrix.runner.arch }}
           if-no-files-found: error
           retention-days: 1
 
@@ -148,12 +148,12 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cp target/release/examples/main main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}
+          cp target/release/examples/main main-macos-${{ matrix.runner.arch }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
-          path: main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}
+          path: main-macos-${{ matrix.runner.arch }}
           if-no-files-found: error
           retention-days: 1
 
@@ -263,5 +263,5 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ./*.zip
-            ./main*
-            ./*/main*
+            ./*/main-macos*
+            ./*/main-linux*
