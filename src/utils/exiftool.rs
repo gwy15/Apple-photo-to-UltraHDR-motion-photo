@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use anyhow::Context;
 
 #[derive(Default)]
 pub struct ExifTool {
@@ -28,7 +29,8 @@ impl ExifTool {
             .arg(format!("-{key}"))
             .args(["-s", "-s", "-s"])
             .arg(file.as_ref().as_os_str())
-            .output()?;
+            .output()
+            .context("Run exiftool command failed. Is exiftool path corrent?")?;
         if !output.status.success() {
             return Err(anyhow::anyhow!(
                 "exiftool failed: {}",

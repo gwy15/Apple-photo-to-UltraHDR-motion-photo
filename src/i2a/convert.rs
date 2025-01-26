@@ -248,13 +248,13 @@ impl ConvertRequest {
         let span = info_span!("decode heic");
         let guard = span.enter();
         let lib_heif = LibHeif::new();
-        let ctx = HeifContext::read_from_file(src.to_str().unwrap())?;
-        let handle = ctx.primary_image_handle()?;
+        let ctx = HeifContext::read_from_file(src.to_str().unwrap()).context("libheif: read heic failed")?;
+        let handle = ctx.primary_image_handle().context("libheif: get image handle failed")?;
         let (width, height) = (handle.width(), handle.height());
         debug!(width, height, "heic-convert: heic file opened, decoding");
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
         trace!("primary colorspace: {:?}", primary_colorspace);
-        let primary_image = lib_heif.decode(&handle, primary_colorspace, None)?;
+        let primary_image = lib_heif.decode(&handle, primary_colorspace, None).context("libheif: decode image failed")?;
         debug!("primary image decoded, {width} x {height}");
         drop(guard);
 
