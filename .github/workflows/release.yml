@@ -102,7 +102,6 @@ jobs:
       - name: Install dependencies
         run: |
           brew install cmake
-          brew install clang
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -177,7 +176,10 @@ jobs:
       - uses: lukka/get-cmake@latest
 
       - name: Set up vcpkg
-        uses: lukka/run-vcpkg@v11 # Always specify the specific _version_ of the
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:/vcpkg
+          C:/vcpkg/bootstrap-vcpkg.bat
+
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
