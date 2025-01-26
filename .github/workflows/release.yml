@@ -212,7 +212,7 @@ jobs:
           $env:VCPKG_ROOT="C:\vcpkg"
           . ./scripts/windows-build.ps1
           Compile-Rust
-          cp target/release/examples/main.exe main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.exe
+          cp target/release/examples/main.exe main.exe
           cp deps/install/bin/turbojpeg.dll ./
           cp deps/install/bin/jpeg62.dll ./
 
@@ -220,7 +220,7 @@ jobs:
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
           path: |
-            main-${{ matrix.runner.os }}-${{ matrix.runner.arch }}.exe
+            main.exe
             ./*.dll
 
           if-no-files-found: error
@@ -248,7 +248,9 @@ jobs:
           merge-multiple: false
 
       - name: List downloaded files
-        run: tree -L 3
+        run: |
+          tree -L 3
+          zip -r windows-x64.zip windows-*/
 
       - uses: softprops/action-gh-release@v2
         env:
@@ -260,5 +262,6 @@ jobs:
           prerelease: ${{ env.TAG_NAME == 'nightly' }}
           tag_name: ${{ env.TAG_NAME }}
           files: |
+            ./*.zip
             ./main*
             ./*/main*
