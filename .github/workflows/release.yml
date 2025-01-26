@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt install -y build-essential apt-utils cmake clang zip
+          sudo apt install -y build-essential apt-utils cmake clang
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -79,13 +79,11 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cd ./target/release/examples
-          zip ../../../${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip main
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip
+          path: target/release/examples/main
           if-no-files-found: error
           retention-days: 1
 
@@ -100,10 +98,6 @@ jobs:
           - { os: macos-14, arch: arm64 }
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          brew install zip
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -153,13 +147,11 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cd ./target/release/examples
-          zip ../../../${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip main
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip
+          path: target/release/examples/main
           if-no-files-found: error
           retention-days: 1
 
@@ -218,13 +210,11 @@ jobs:
           $env:VCPKG_ROOT="C:\vcpkg"
           . ./scripts/windows-build.ps1
           Compile-Rust
-          cd ./target/release/examples
-          Compress-Archive -Path main.exe -DestinationPath ../../../${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}
-          path: ${{ matrix.runner.arch }}-${{ matrix.runner.os }}.zip
+          path: target/release/examples/main.exe
           if-no-files-found: error
           retention-days: 1
 
