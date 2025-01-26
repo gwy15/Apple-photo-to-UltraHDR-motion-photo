@@ -15,6 +15,7 @@ RUN ./scripts/linux-build-libuhdr.sh /libuhdr /pkg-config && \
 
 RUN env PKG_CONFIG_PATH=/pkg-config/lib/pkgconfig PKG_CONFIG_LIBDIR=/pkg-config/lib \
         PKG_CONFIG_ALL_STATIC=true \
+        TURBOJPEG_STATIC=1 TURBOJPEG_LIB_DIR=/pkg-config/lib TURBOJPEG_INCLUDE_PATH=/pkg-config/include \
     cargo build --example main --release
 
 # runtime
