@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use anyhow::Context;
+use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub struct ExifTool {
