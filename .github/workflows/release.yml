@@ -4,9 +4,8 @@ concurrency:
   cancel-in-progress: true
 on:
   push:
-  # push:
-  #   tags:
-  #     - v[0-9]+.[0-9]+.[0-9]+
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
   #schedule:
   #  - cron: '30 4 * * *'
   workflow_dispatch:
@@ -103,7 +102,6 @@ jobs:
       - name: Install dependencies
         run: |
           brew install cmake
-          brew install tree
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -152,9 +150,6 @@ jobs:
           export TURBOJPEG_STATIC=1
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
-          echo 'debug print'
-          tree pkg-config/lib/pkgconfig
-          PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1 pkg-config --static --libs --cflags libheif "libheif >= 1.18"
           cargo build --example main --release
 
       - uses: actions/upload-artifact@v4
