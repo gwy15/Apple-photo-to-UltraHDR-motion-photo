@@ -25,6 +25,16 @@ impl ConvertRequest {
         if self.output_path.is_dir() {
             bail!("Output path is a directory");
         }
+        let output_ext = self
+            .output_path
+            .extension()
+            .context("output path has no extension")?;
+        anyhow::ensure!(
+            ["jpg", "jpeg"]
+                .iter()
+                .any(|e| output_ext.eq_ignore_ascii_case(e)),
+            "Output path must have jpg extension"
+        );
         if !self.io_same_file() && self.output_path.exists() {
             bail!("Output file already exists");
         }

@@ -27,6 +27,11 @@ impl ConvertRequest {
             .eq_ignore_ascii_case(self.output_path.as_os_str())
     }
 
+    fn is_heic(&self) -> anyhow::Result<bool> {
+        let ans = self.image_extension()?.to_ascii_lowercase() == "heic";
+        Ok(ans)
+    }
+
     pub fn convert(&self) -> anyhow::Result<()> {
         debug!(
             "Running convert request {} + {} => {}",
@@ -39,12 +44,9 @@ impl ConvertRequest {
 
         // if input == output == *.jpg, skip
         if !self.io_same_file() {
-            // only heic is supported
-            let converted = self
-                .ensure_jpg()
-                .with_context(|| format!("ensure_jpg failed: {}", self.image_path.display()))?;
-            if !converted {
-                self.copy_image()?;
+            match self.is_heic()? {
+                true => self.convert_heic_to_jpg()?,
+                false => self.copy_image()?,
             }
         }
         // in case rest failed, remove generated output

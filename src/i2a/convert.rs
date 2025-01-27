@@ -5,32 +5,29 @@ use std::{ffi::OsStr, path::Path};
 use super::ConvertRequest;
 
 impl ConvertRequest {
-    fn image_extension(&self) -> Result<&OsStr> {
+    pub(crate) fn image_extension(&self) -> Result<&OsStr> {
         self.image_path
             .extension()
             .context("No extension found for image path")
     }
 
-    /// convert heic to jpg if necessary
-    ///
-    /// # Return
-    /// true if converted (to output_path)
+    /// convert heic to jpg
     ///
     /// # Reference
     /// 1. https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos
-    pub(crate) fn ensure_jpg(&self) -> anyhow::Result<bool> {
-        let is_heic = self.image_extension()?.to_ascii_lowercase() == "heic";
-        if !is_heic {
-            return Ok(false);
-        }
-        self.convert_heic_to_jpg(&self.image_path, &self.output_path)?;
+    pub(crate) fn convert_heic_to_jpg(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(self.is_heic()?, "Not a heic file");
+        self.do_convert_heic_to_jpg(&self.image_path, &self.output_path)
+            .with_context(|| {
+                format!("convert heic to jpeg failed: {}", self.image_path.display())
+            })?;
         debug!(size=%self.output_path.metadata()?.len(), "heic converted to jpg");
         // sync metadata
         self.exif_tool()
             .copy_meta(&self.image_path, &self.output_path)
             .context("write exiftool failed")?;
         trace!("heic convert: jpg exif copied");
-        Ok(true)
+        Ok(())
     }
 
     /// Return Some(headroom) if HDR heic, None if not HDR heic
@@ -243,7 +240,7 @@ impl ConvertRequest {
     }
 
     #[tracing::instrument(skip_all)]
-    fn convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
+    fn do_convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
         let profile = self.exif_tool().get_value(src, "ProfileDescription")?;
         if let Some(profile) = profile.as_ref() {
             anyhow::ensure!(profile.starts_with("Display P3"));
