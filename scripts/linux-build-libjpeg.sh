@@ -14,5 +14,5 @@ if [ ! -d "$build" ]; then
 fi
 cd $build
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$install \
-      -DBUILD_SHARED_LIBS=OFF $path
+      -DBUILD_SHARED_LIBS=OFF -DWITH_JPEG8=1 $path
 cmake --build $build
