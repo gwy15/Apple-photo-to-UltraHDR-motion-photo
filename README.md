@@ -63,4 +63,5 @@ main d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exiftool\exift
 ```
 
 ## Known problems
-- [ ] Audio in motion photos does not work, at least on my Xiaomi phone.
+- [ ] Audio in motion photos does not work, at least on my Xiaomi phone. This is because Apple encodes audio in pcm_s16le, which is not widely supported.
+    - [ ] TODO: use ffmpeg-cli or libffmpeg to convert audio to aac.
