@@ -85,6 +85,13 @@ impl ConvertRequest {
         Ok(())
     }
 
+    pub(crate) fn output_is_motion_photo(&self) -> Result<bool> {
+        let micro_video = self
+            .exif_tool()
+            .get_value(&self.output_path, "XMP-GCamera:MicroVideo")?;
+        Ok(micro_video.is_some())
+    }
+
     pub(crate) fn update_exif(&self) -> anyhow::Result<()> {
         // release exiftool.config
         use std::io::Write;
