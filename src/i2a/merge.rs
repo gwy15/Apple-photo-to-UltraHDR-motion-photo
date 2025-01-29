@@ -92,7 +92,7 @@ impl ConvertRequest {
         Ok(micro_video.is_some())
     }
 
-    pub(crate) fn update_exif(&self) -> anyhow::Result<()> {
+    pub(crate) fn update_motion_photo_exif(&self) -> anyhow::Result<()> {
         // release exiftool.config
         use std::io::Write;
         const EXIFTOOL_CONFIG: &str = include_str!("exiftool.config");

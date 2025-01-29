@@ -16,7 +16,7 @@ impl ConvertRequest {
     /// # Reference
     /// 1. https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos
     pub(crate) fn convert_heic_to_jpg(&self) -> anyhow::Result<()> {
-        anyhow::ensure!(self.is_heic()?, "Not a heic file");
+        anyhow::ensure!(self.is_input_heic()?, "Not a heic file");
         self.do_convert_heic_to_jpg(&self.image_path, &self.output_path)
             .with_context(|| {
                 format!("convert heic to jpeg failed: {}", self.image_path.display())

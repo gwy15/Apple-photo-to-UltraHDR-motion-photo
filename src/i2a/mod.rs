@@ -27,7 +27,7 @@ impl ConvertRequest {
             .eq_ignore_ascii_case(self.output_path.as_os_str())
     }
 
-    fn is_heic(&self) -> anyhow::Result<bool> {
+    fn is_input_heic(&self) -> anyhow::Result<bool> {
         let ans = self.image_extension()?.to_ascii_lowercase() == "heic";
         Ok(ans)
     }
@@ -42,9 +42,9 @@ impl ConvertRequest {
         let t = std::time::Instant::now();
         self.check_valid().context("request arguments invalid")?;
 
-        // make output file
+        // convert image
         if !self.io_same_file() {
-            match self.is_heic()? {
+            match self.is_input_heic()? {
                 true => self.convert_heic_to_jpg()?,
                 false => self.copy_image()?,
             }
@@ -58,10 +58,12 @@ impl ConvertRequest {
         });
 
         match self.output_is_motion_photo()? {
-            true => warn!("Output is already a motion photo, skip append video"),
+            true => {
+                warn!("Output is already a motion photo, skip append video");
+            }
             false => {
                 self.append_video()?;
-                self.update_exif()?;
+                self.update_motion_photo_exif()?;
             }
         }
         match self.io_same_file() {
