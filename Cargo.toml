@@ -25,6 +25,11 @@ turbojpeg = { version = "1.2.1", default-features = false }
 turbojpeg-sys = { version = "1", default-features = false }
 rayon = "1.10.0"
 
+[dependencies.rsmpeg]
+version = "0.15"
+default-features = false
+features = ["ffmpeg7"]
+
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 clap = { version = "4.5.26", features = ["derive"] }
