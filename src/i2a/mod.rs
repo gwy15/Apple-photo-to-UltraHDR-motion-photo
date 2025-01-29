@@ -4,6 +4,7 @@ use std::path::PathBuf;
 mod convert;
 mod merge;
 mod utils;
+pub mod video;
 
 #[derive(Debug)]
 pub struct ConvertRequest {

@@ -1,10 +1,20 @@
 {
     "cSpell.words": [
+        "avcodec",
+        "codecpar",
         "colorspace",
         "exif",
         "exiftool",
+        "rsmpeg",
         "turbojpeg",
         "uhdr",
         "ultrahdr"
-    ]
+    ],
+    "rust-analyzer.cargo.extraEnv": {
+        "FFMPEG_PKG_CONFIG_PATH": "${workspaceFolder}/pkg-config/lib/pkgconfig",
+        "TURBOJPEG_LIB_DIR": "${workspaceFolder}/pkg-config/lib",
+        "TURBOJPEG_INCLUDE_PATH": "${workspaceFolder}/pkg-config/include",
+        "PKG_CONFIG_PATH": "${workspaceFolder}/pkg-config/lib/pkgconfig",
+        "PKG_CONFIG_LIBDIR": "${workspaceFolder}/pkg-config/lib"
+    }
 }
