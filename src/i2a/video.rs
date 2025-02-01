@@ -204,7 +204,7 @@ impl VideoAudioEncodeRequest<'_> {
         }
         o_stream.set_time_base(o_codec_ctx.time_base);
 
-        o_stream.codecpar_mut().from_context(&mut o_codec_ctx);
+        o_stream.codecpar_mut().from_context(&o_codec_ctx);
         o_codec_ctx.open(None).context("output audio codec context open failed")?;
         debug!(%o_codec_ctx.sample_rate, %o_codec_ctx.bit_rate, %o_codec_ctx.frame_size, "output audio codec");
 
