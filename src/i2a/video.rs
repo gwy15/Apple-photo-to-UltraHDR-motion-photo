@@ -10,6 +10,7 @@ use std::{ffi::CString, path::Path};
 pub struct VideoAudioEncodeRequest<'a> {
     pub input: &'a Path,
     pub output: &'a Path,
+    pub bit_rate: i64,
 }
 
 impl VideoAudioEncodeRequest<'_> {
@@ -25,7 +26,7 @@ impl VideoAudioEncodeRequest<'_> {
         debug!(%input_video_idx, %output_video_idx, "video configured");
 
         // 2.b configurations: audio
-        let mut audio = Self::get_audio_configure(&i_fmt_ctx, &mut o_fmt_ctx)?;
+        let mut audio = self.get_audio_configure(&i_fmt_ctx, &mut o_fmt_ctx)?;
         debug!(
             input_audio_idx = audio.input_stream_index,
             output_audio_idx = audio.output_stream_index,
@@ -142,7 +143,7 @@ impl VideoAudioEncodeRequest<'_> {
         Ok((input_video_idx, output_video.index as usize))
     }
 
-    fn get_audio_configure(i_fmt_ctx: &AVFormatContextInput, o_fmt_ctx: &mut AVFormatContextOutput) -> Result<AudioConfigure> {
+    fn get_audio_configure(&self, i_fmt_ctx: &AVFormatContextInput, o_fmt_ctx: &mut AVFormatContextOutput) -> Result<AudioConfigure> {
         // 1. get input audio index and codec
         let (i_idx, i_codec) = i_fmt_ctx
             .find_best_stream(rsmpeg::ffi::AVMEDIA_TYPE_AUDIO)
@@ -162,12 +163,14 @@ impl VideoAudioEncodeRequest<'_> {
         let mut o_stream = o_fmt_ctx.new_stream();
         let output_stream_index = o_stream.index as usize;
         // 4. create output audio codec context
-        let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AAC).context("No AAC encoder builtin.")?;
+        let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AC3).context("No encoder builtin.")?;
         let mut o_codec_ctx = rsmpeg::avcodec::AVCodecContext::new(&o_codec);
         o_codec_ctx.set_sample_rate(i_codec_ctx.sample_rate);
-        o_codec_ctx.set_bit_rate(128 << 10);
+        o_codec_ctx.set_bit_rate(self.bit_rate);
         o_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1));
         o_codec_ctx.set_sample_fmt(rsmpeg::ffi::AV_SAMPLE_FMT_FLTP);
+        // See https://github.com/larksuite/rsmpeg/issues/198
+        // o_codec_ctx.set_frame_size(i_codec_ctx.frame_size);
         o_codec_ctx.set_pkt_timebase(rsmpeg::avutil::AVRational {
             num: 1,
             den: i_codec_ctx.sample_rate,
