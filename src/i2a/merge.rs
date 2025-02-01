@@ -25,23 +25,15 @@ impl ConvertRequest {
         if self.output_path.is_dir() {
             bail!("Output path is a directory");
         }
-        let output_ext = self
-            .output_path
-            .extension()
-            .context("output path has no extension")?;
+        let output_ext = self.output_path.extension().context("output path has no extension")?;
         anyhow::ensure!(
-            ["jpg", "jpeg"]
-                .iter()
-                .any(|e| output_ext.eq_ignore_ascii_case(e)),
+            ["jpg", "jpeg"].iter().any(|e| output_ext.eq_ignore_ascii_case(e)),
             "Output path must have jpg extension"
         );
         if !self.io_same_file() && self.output_path.exists() {
             bail!("Output file already exists");
         }
-        let parent = self
-            .output_path
-            .parent()
-            .context("Invalid output path: no parent")?;
+        let parent = self.output_path.parent().context("Invalid output path: no parent")?;
         if !parent.exists() {
             bail!("Output path parent does not exist. You must create it with proper permissions.");
         }
@@ -55,10 +47,7 @@ impl ConvertRequest {
         Ok(())
     }
     pub(crate) fn append_video(&self) -> anyhow::Result<()> {
-        let mut output = std::fs::File::options()
-            .append(true)
-            .truncate(false)
-            .open(&self.output_path)?;
+        let mut output = std::fs::File::options().append(true).truncate(false).open(&self.output_path)?;
         let mut video = std::fs::File::open(&self.video_path)?;
         std::io::copy(&mut video, &mut output)?;
         Ok(())
@@ -86,9 +75,7 @@ impl ConvertRequest {
     }
 
     pub(crate) fn output_is_motion_photo(&self) -> Result<bool> {
-        let micro_video = self
-            .exif_tool()
-            .get_value(&self.output_path, "XMP-GCamera:MicroVideo")?;
+        let micro_video = self.exif_tool().get_value(&self.output_path, "XMP-GCamera:MicroVideo")?;
         Ok(micro_video.is_some())
     }
 

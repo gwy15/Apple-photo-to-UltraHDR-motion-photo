@@ -1,7 +1,5 @@
 fn main() {
-    tracing_subscriber::fmt::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    tracing_subscriber::fmt::fmt().with_max_level(tracing::Level::DEBUG).init();
 
     motion::i2a::ConvertRequest {
         image_path: "./testdata/IMG_3850.HEIC".into(),

@@ -6,9 +6,7 @@ use super::ConvertRequest;
 
 impl ConvertRequest {
     pub(crate) fn image_extension(&self) -> Result<&OsStr> {
-        self.image_path
-            .extension()
-            .context("No extension found for image path")
+        self.image_path.extension().context("No extension found for image path")
     }
 
     /// convert heic to jpg
@@ -18,9 +16,7 @@ impl ConvertRequest {
     pub(crate) fn convert_heic_to_jpg(&self) -> anyhow::Result<()> {
         anyhow::ensure!(self.is_input_heic()?, "Not a heic file");
         self.do_convert_heic_to_jpg(&self.image_path, &self.output_path)
-            .with_context(|| {
-                format!("convert heic to jpeg failed: {}", self.image_path.display())
-            })?;
+            .with_context(|| format!("convert heic to jpeg failed: {}", self.image_path.display()))?;
         debug!(size=%self.output_path.metadata()?.len(), "heic converted to jpg");
         // sync metadata
         self.exif_tool()
@@ -44,9 +40,7 @@ impl ConvertRequest {
         trace!("detected Apple HDRGainMapVersion = {hdr_version}");
         if let Some(headroom) = self.exif_tool().get_value(path, "xmp:HDRGainMapHeadroom")? {
             trace!(%headroom, "got xmp:HDRGainMapHeadroom");
-            let headroom = headroom
-                .parse::<f32>()
-                .context("Invalid HDRGainMapHeadroom value")?;
+            let headroom = headroom.parse::<f32>().context("Invalid HDRGainMapHeadroom value")?;
             return Ok(Some(headroom));
         }
         // get markers
@@ -78,10 +72,7 @@ impl ConvertRequest {
     }
 
     #[tracing::instrument(skip_all)]
-    fn get_apple_gainmap_image(
-        lib_heif: &libheif_rs::LibHeif,
-        handle: &libheif_rs::ImageHandle,
-    ) -> anyhow::Result<libheif_rs::Image> {
+    fn get_apple_gainmap_image(lib_heif: &libheif_rs::LibHeif, handle: &libheif_rs::ImageHandle) -> anyhow::Result<libheif_rs::Image> {
         for aux_handle in handle.auxiliary_images(libheif_rs::AuxiliaryImagesFilter::new()) {
             // expected "urn:com:apple:photo:2020:aux:hdrgainmap"
             // as per <https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos>
@@ -96,11 +87,7 @@ impl ConvertRequest {
                 libheif_rs::ColorSpace::Undefined,
                 None,
             )?;
-            debug!(
-                "heic-convert: aux image (gainmap) {} x {}",
-                aux_image.width(),
-                aux_image.height()
-            );
+            debug!("heic-convert: aux image (gainmap) {} x {}", aux_image.width(), aux_image.height());
             return Ok(aux_image);
         }
         anyhow::bail!("No auxiliary image found with name urn:com:apple:photo:2020:aux:hdrgainmap")
@@ -108,11 +95,7 @@ impl ConvertRequest {
 
     /// Returns encoded grayscale image
     #[tracing::instrument(skip_all)]
-    fn create_gainmap_jpg(
-        &self,
-        apple_hdr_gainmap: &libheif_rs::Image,
-        apple_headroom: f32,
-    ) -> anyhow::Result<turbojpeg::OwnedBuf> {
+    fn create_gainmap_jpg(&self, apple_hdr_gainmap: &libheif_rs::Image, apple_headroom: f32) -> anyhow::Result<turbojpeg::OwnedBuf> {
         let planes = apple_hdr_gainmap.planes();
         let hdr_gainmap = planes.y.context("hdr_gain planes y is None")?;
         let (width, height) = (hdr_gainmap.width as usize, hdr_gainmap.height as usize);
@@ -174,17 +157,12 @@ impl ConvertRequest {
     }
 
     #[tracing::instrument(skip_all)]
-    fn convert_primary_image_to_jpg(
-        &self,
-        image: &libheif_rs::Image,
-    ) -> Result<turbojpeg::OwnedBuf> {
+    fn convert_primary_image_to_jpg(&self, image: &libheif_rs::Image) -> Result<turbojpeg::OwnedBuf> {
         let (w, h) = (image.width() as usize, image.height() as usize);
 
         let colorspace = image.color_space().context("no color space")?;
         anyhow::ensure!(colorspace == libheif_rs::ColorSpace::YCbCr(libheif_rs::Chroma::C420));
-        let y_bits = image
-            .bits_per_pixel(libheif_rs::Channel::Y)
-            .context("no bits per pixel")?;
+        let y_bits = image.bits_per_pixel(libheif_rs::Channel::Y).context("no bits per pixel")?;
         anyhow::ensure!(y_bits == 8);
         let planes = image.planes();
         let y = planes.y.context("no y plane")?;
@@ -201,11 +179,7 @@ impl ConvertRequest {
 
         macro_rules! fill_turbojpeg {
             ($src:ident => $target:ident, $target_w:expr, $target_h:expr) => {{
-                let (src_w, src_h, src_stride) = (
-                    $src.width as usize,
-                    $src.height as usize,
-                    $src.stride as usize,
-                );
+                let (src_w, src_h, src_stride) = ($src.width as usize, $src.height as usize, $src.stride as usize);
                 anyhow::ensure!(src_w <= $target_w);
                 anyhow::ensure!(src_h <= $target_h);
                 for i in 0..src_h {
@@ -213,8 +187,7 @@ impl ConvertRequest {
                     $target.extend_from_slice(&$src.data[idx..idx + src_w]);
                     (src_w..$target_w).for_each(|_| $target.push(0));
                 }
-                (src_h..$target_h)
-                    .for_each(|_| $target.extend(std::iter::repeat(0).take($target_w)));
+                (src_h..$target_h).for_each(|_| $target.extend(std::iter::repeat(0).take($target_w)));
             }};
         }
         fill_turbojpeg!(y => tj_buffer, w1, h1);
@@ -250,11 +223,8 @@ impl ConvertRequest {
         let span = info_span!("decode heic");
         let guard = span.enter();
         let lib_heif = LibHeif::new();
-        let ctx = HeifContext::read_from_file(src.to_str().unwrap())
-            .context("libheif: read heic failed")?;
-        let handle = ctx
-            .primary_image_handle()
-            .context("libheif: get image handle failed")?;
+        let ctx = HeifContext::read_from_file(src.to_str().unwrap()).context("libheif: read heic failed")?;
+        let handle = ctx.primary_image_handle().context("libheif: get image handle failed")?;
         let (width, height) = (handle.width(), handle.height());
         debug!(width, height, "heic-convert: heic file opened, decoding");
         let primary_colorspace = handle.preferred_decoding_colorspace()?;
@@ -265,8 +235,7 @@ impl ConvertRequest {
         debug!("primary image decoded, {width} x {height}");
         drop(guard);
 
-        let mut primary_image = info_span!("encoding sdr to jpg")
-            .in_scope(|| self.convert_primary_image_to_jpg(&primary_image))?;
+        let mut primary_image = info_span!("encoding sdr to jpg").in_scope(|| self.convert_primary_image_to_jpg(&primary_image))?;
 
         // check if apple HDR
         let apple_headroom = self.get_apple_headroom_from_exif(src)?;
@@ -276,10 +245,7 @@ impl ConvertRequest {
             std::fs::write(output, &primary_image)?;
             return Ok(());
         };
-        anyhow::ensure!(
-            profile.is_some(),
-            "Apple headroom found, but ProfileDescription not found in exif"
-        );
+        anyhow::ensure!(profile.is_some(), "Apple headroom found, but ProfileDescription not found in exif");
 
         // write ultra HDR image
         let mut encoder = libultrahdr_rs::Encoder::new();
@@ -288,9 +254,7 @@ impl ConvertRequest {
 
         let mut base_image = libultrahdr_rs::CompressedImage::from_bytes(&mut primary_image);
         *base_image.color_gamut_mut() = libultrahdr_rs::sys::uhdr_color_gamut::UHDR_CG_DISPLAY_P3;
-        encoder
-            .set_compressed_base_image(base_image)
-            .context("cannot set base_image")?;
+        encoder.set_compressed_base_image(base_image).context("cannot set base_image")?;
 
         // get gainmap
         let apple_gainmap = Self::get_apple_gainmap_image(&lib_heif, &handle)?;

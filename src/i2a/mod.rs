@@ -22,9 +22,7 @@ pub struct ConvertRequest {
 impl ConvertRequest {
     /// Input and output is same file
     pub fn io_same_file(&self) -> bool {
-        self.image_path
-            .as_os_str()
-            .eq_ignore_ascii_case(self.output_path.as_os_str())
+        self.image_path.as_os_str().eq_ignore_ascii_case(self.output_path.as_os_str())
     }
 
     fn is_input_heic(&self) -> anyhow::Result<bool> {

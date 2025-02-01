@@ -138,10 +138,7 @@ impl Args {
             return Ok(());
         }
         let image_path = found_image.pop().unwrap();
-        if image_path
-            .as_os_str()
-            .eq_ignore_ascii_case(path.as_os_str())
-        {
+        if image_path.as_os_str().eq_ignore_ascii_case(path.as_os_str()) {
             return Ok(());
         }
         // anyhow::ensure!(image_path == path, "{image_path:#?} != {path:#?}");
@@ -179,8 +176,7 @@ impl Args {
 }
 
 fn run(task: Task, original: Original) -> Result<()> {
-    task.convert()
-        .with_context(|| format!("Task failed for {task:#?}"))?;
+    task.convert().with_context(|| format!("Task failed for {task:#?}"))?;
     if original == Original::Delete {
         task.delete_original()?;
     }
@@ -196,13 +192,9 @@ fn main() -> Result<()> {
         tracing::Level::INFO
     };
     let indicatif_layer = tracing_indicatif::IndicatifLayer::new();
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_writer(indicatif_layer.get_stderr_writer().with_max_level(level));
+    let fmt_layer = tracing_subscriber::fmt::layer().with_writer(indicatif_layer.get_stderr_writer().with_max_level(level));
 
-    tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(indicatif_layer)
-        .init();
+    tracing_subscriber::registry().with(fmt_layer).with(indicatif_layer).init();
 
     // 1. collect all tasks
     let mut tasks = Vec::new();
@@ -210,9 +202,7 @@ fn main() -> Result<()> {
 
     // 2. run all tasks
     info!("Running {} tasks", tasks.len());
-    let bar_style = indicatif::ProgressStyle::with_template(
-        "{pos:>5}/{len:5} ({percent:>2}%) {wide_bar} {elapsed:5}/{eta:<5}",
-    )?;
+    let bar_style = indicatif::ProgressStyle::with_template("{pos:>5}/{len:5} ({percent:>2}%) {wide_bar} {elapsed:5}/{eta:<5}")?;
     let span = tracing::info_span!("Running tasks");
     span.pb_set_style(&bar_style);
     span.pb_set_length(tasks.len() as u64);

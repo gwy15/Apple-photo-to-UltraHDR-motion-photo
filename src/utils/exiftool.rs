@@ -11,17 +11,10 @@ impl ExifTool {
         Self { path: None }
     }
     pub fn with_path(path: impl Into<PathBuf>) -> Self {
-        Self {
-            path: Some(path.into()),
-        }
+        Self { path: Some(path.into()) }
     }
     pub fn command(&self) -> std::process::Command {
-        std::process::Command::new(
-            self.path
-                .as_ref()
-                .and_then(|e| e.as_os_str().to_str())
-                .unwrap_or("exiftool"),
-        )
+        std::process::Command::new(self.path.as_ref().and_then(|e| e.as_os_str().to_str()).unwrap_or("exiftool"))
     }
     pub fn get_value(&self, file: impl AsRef<Path>, key: &str) -> anyhow::Result<Option<String>> {
         let output = self
@@ -32,10 +25,7 @@ impl ExifTool {
             .output()
             .context("Run exiftool command failed. Is exiftool path corrent?")?;
         if !output.status.success() {
-            return Err(anyhow::anyhow!(
-                "exiftool failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+            return Err(anyhow::anyhow!("exiftool failed: {}", String::from_utf8_lossy(&output.stderr)));
         }
         let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if value.is_empty() {
@@ -53,10 +43,7 @@ impl ExifTool {
             .arg(dst.as_ref().as_os_str())
             .output()?;
         if !output.status.success() {
-            return Err(anyhow::anyhow!(
-                "exiftool failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+            return Err(anyhow::anyhow!("exiftool failed: {}", String::from_utf8_lossy(&output.stderr)));
         }
         Ok(())
     }
