@@ -48,6 +48,7 @@ impl VideoAudioEncodeRequest<'_> {
         let mut converted_frame = audio.new_frame();
         let frame_size = audio.output_codec_context.frame_size as usize;
         let mut buffer = AudioBuffer::new(bytes_per_sample);
+        // TODO: https://ffmpeg.org/doxygen/7.0/transcode_aac_8c-example.html
 
         while let Some(mut packet) = i_fmt_ctx.read_packet()? {
             // debug!(stream_id = packet.stream_index, "received packet from input format context");
@@ -96,6 +97,7 @@ impl VideoAudioEncodeRequest<'_> {
             audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
         }
         audio.output_codec_context.send_frame(None)?;
+        // audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
         // 5. write trailer
         o_fmt_ctx.write_trailer().context("write tailer failed")?;
 
@@ -139,18 +141,34 @@ impl VideoAudioEncodeRequest<'_> {
         let mut i_codec_ctx = rsmpeg::avcodec::AVCodecContext::new(&i_codec);
         i_codec_ctx.apply_codecpar(&i_stream.codecpar())?;
         i_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1)); // overwrite channel layout
+        i_codec_ctx.set_pkt_timebase(i_stream.time_base);
         i_codec_ctx.open(None).context("input video codec context open failed")?;
         debug!(%i_codec_ctx.sample_rate, %i_codec_ctx.bit_rate, %i_codec_ctx.frame_size, "input audio codec");
 
         // 3. create output audio stream
+        let global_header = (o_fmt_ctx.flags | rsmpeg::ffi::AVFMT_GLOBALHEADER as i32) != 0;
         let mut o_stream = o_fmt_ctx.new_stream();
+        let output_stream_index = o_stream.index as usize;
         // 4. create output audio codec context
         let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AAC).context("No AAC encoder builtin.")?;
         let mut o_codec_ctx = rsmpeg::avcodec::AVCodecContext::new(&o_codec);
         o_codec_ctx.set_sample_rate(i_codec_ctx.sample_rate);
-        o_codec_ctx.set_bit_rate(192 << 10);
+        o_codec_ctx.set_bit_rate(128 << 10);
         o_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1));
         o_codec_ctx.set_sample_fmt(rsmpeg::ffi::AV_SAMPLE_FMT_FLTP);
+        o_codec_ctx.set_pkt_timebase(rsmpeg::avutil::AVRational {
+            num: 1,
+            den: i_codec_ctx.sample_rate,
+        });
+        o_codec_ctx.set_time_base(rsmpeg::avutil::AVRational {
+            num: 1,
+            den: o_codec_ctx.sample_rate,
+        });
+        if global_header {
+            o_codec_ctx.set_flags(rsmpeg::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
+        }
+        o_stream.set_time_base(o_codec_ctx.time_base);
+
         o_stream.codecpar_mut().from_context(&mut o_codec_ctx);
         o_codec_ctx.open(None).context("output audio codec context open failed")?;
         debug!(%o_codec_ctx.sample_rate, %o_codec_ctx.bit_rate, %o_codec_ctx.frame_size, "output audio codec");
@@ -168,7 +186,7 @@ impl VideoAudioEncodeRequest<'_> {
 
         Ok(AudioConfigure {
             input_stream_index: i_idx,
-            output_stream_index: o_stream.index as usize,
+            output_stream_index,
             input_codec_context: i_codec_ctx,
             output_codec_context: o_codec_ctx,
             resampler,
@@ -194,11 +212,11 @@ impl AudioConfigure {
     pub fn flush_output(&mut self, i_fmt_ctx: &AVFormatContextInput, o_fmt_ctx: &mut AVFormatContextOutput) -> Result<()> {
         while let Ok(mut packet) = self.output_codec_context.receive_packet() {
             packet.set_stream_index(self.output_stream_index as i32);
-            // packet.set_
-            packet.rescale_ts(
-                i_fmt_ctx.streams()[self.input_stream_index].time_base,
-                o_fmt_ctx.streams()[self.output_stream_index].time_base,
-            );
+            // debug!("output packet pts={:?}", packet.pts);
+            let _from = i_fmt_ctx.streams()[self.input_stream_index].time_base;
+            let _to = o_fmt_ctx.streams()[self.output_stream_index].time_base;
+            packet.rescale_ts(_from, _to);
+            // debug!("after rescale, packet.pts = {}, timebase = {:?} (from {_from:?}", packet.pts, _to);
             o_fmt_ctx.write_frame(&mut packet).context("write frame failed")?;
         }
         Ok(())
