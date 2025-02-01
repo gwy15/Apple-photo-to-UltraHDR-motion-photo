@@ -11,6 +11,7 @@ pub struct VideoAudioEncodeRequest<'a> {
     pub input: &'a Path,
     pub output: &'a Path,
     pub bit_rate: i64,
+    pub encoder: &'static str,
 }
 
 impl VideoAudioEncodeRequest<'_> {
@@ -46,8 +47,11 @@ impl VideoAudioEncodeRequest<'_> {
             1,
         );
         let frame_size = audio.output_codec_context.frame_size as usize;
-        let mut converted_frame = audio.new_frame();
         let mut pts: i64 = 0;
+        debug!(
+            "ia_frame_size = {}, oa_frame_size = {}",
+            audio.input_codec_context.frame_size, audio.output_codec_context.frame_size
+        );
 
         while let Some(mut packet) = i_fmt_ctx.read_packet()? {
             if packet.stream_index == input_video_idx as i32 {
@@ -60,11 +64,17 @@ impl VideoAudioEncodeRequest<'_> {
                 continue;
             }
             if packet.stream_index == audio.input_stream_index as i32 {
+                // debug!(
+                //     "t = {:.3} - {:.3}",
+                //     packet.pts as f64 / ia_timebase.den as f64,
+                //     (packet.dts + packet.duration) as f64 / ia_timebase.den as f64
+                // );
                 audio
                     .input_codec_context
                     .send_packet(Some(&packet))
                     .context("Send packet to input audio codec context failed")?;
                 while let Ok(frame) = audio.input_codec_context.receive_frame() {
+                    let mut converted_frame = audio.new_frame();
                     audio
                         .resampler
                         .convert_frame(Some(&frame), &mut converted_frame)
@@ -77,9 +87,15 @@ impl VideoAudioEncodeRequest<'_> {
                     while fifo.size() as usize >= frame_size {
                         let mut new_frame = audio.new_frame();
                         new_frame.set_nb_samples(frame_size as i32);
-                        new_frame.set_pts(pts - frame_size as i64);
+                        new_frame.set_pts(pts - fifo.size() as i64);
                         new_frame.alloc_buffer()?;
                         unsafe { fifo.read(new_frame.data.as_ptr(), new_frame.nb_samples) }?;
+
+                        // debug!(
+                        //     "=> t = {:.3} - {:.3}",
+                        //     new_frame.pts as f64 / oa_timebase.den as f64,
+                        //     (new_frame.pts + new_frame.nb_samples as i64) as f64 / oa_timebase.den as f64
+                        // );
 
                         audio
                             .output_codec_context
@@ -93,6 +109,7 @@ impl VideoAudioEncodeRequest<'_> {
 
         // 处理 FIFO 中剩余的数据
         while fifo.size() > 0 {
+            debug!("flushing tail packets, size={}", fifo.size());
             let samples = std::cmp::min(fifo.size(), frame_size as i32);
             let mut new_frame = audio.new_frame();
             new_frame.set_nb_samples(samples as i32);
@@ -155,6 +172,7 @@ impl VideoAudioEncodeRequest<'_> {
         i_codec_ctx.apply_codecpar(&i_stream.codecpar())?;
         i_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1)); // overwrite channel layout
         i_codec_ctx.set_pkt_timebase(i_stream.time_base);
+        i_codec_ctx.set_time_base(i_stream.time_base);
         i_codec_ctx.open(None).context("input audio codec context open failed")?;
         debug!(%i_codec_ctx.sample_rate, %i_codec_ctx.bit_rate, %i_codec_ctx.frame_size, "input audio codec");
 
@@ -163,7 +181,9 @@ impl VideoAudioEncodeRequest<'_> {
         let mut o_stream = o_fmt_ctx.new_stream();
         let output_stream_index = o_stream.index as usize;
         // 4. create output audio codec context
-        let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AC3).context("No encoder builtin.")?;
+        // let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AC3).context("No encoder builtin.")?;
+        let name = CString::new(self.encoder)?;
+        let o_codec = rsmpeg::avcodec::AVCodec::find_encoder_by_name(&name).context("No encoder found.")?;
         let mut o_codec_ctx = rsmpeg::avcodec::AVCodecContext::new(&o_codec);
         o_codec_ctx.set_sample_rate(i_codec_ctx.sample_rate);
         o_codec_ctx.set_bit_rate(self.bit_rate);
@@ -232,7 +252,6 @@ impl AudioConfigure {
             let from = i_fmt_ctx.streams()[self.input_stream_index].time_base;
             let to = o_fmt_ctx.streams()[self.output_stream_index].time_base;
             packet.rescale_ts(from, to);
-            // debug!(%packet.pts, %packet.dts, ?from, ?to, "flush output");
             o_fmt_ctx.write_frame(&mut packet).context("write frame failed")?;
         }
         Ok(())
