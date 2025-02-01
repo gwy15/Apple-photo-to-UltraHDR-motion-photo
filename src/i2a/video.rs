@@ -15,6 +15,10 @@ pub struct VideoAudioEncodeRequest<'a> {
 }
 
 impl VideoAudioEncodeRequest<'_> {
+    pub fn mute_ffmpeg_log() {
+        unsafe { rsmpeg::ffi::av_log_set_level(rsmpeg::ffi::AV_LOG_ERROR as i32) };
+    }
+
     pub fn execute(&self) -> Result<()> {
         // 1.a open input
         let mut i_fmt_ctx = self.input_format_context()?;

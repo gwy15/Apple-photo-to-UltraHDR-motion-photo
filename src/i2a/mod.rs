@@ -61,6 +61,7 @@ impl ConvertRequest {
                 warn!("Output is already a motion photo, skip append video");
             }
             false => {
+                // TODO: convert mov to mp4 (and ensure ac3 audio)
                 self.append_video()?;
                 self.update_motion_photo_exif()?;
             }
