@@ -2,12 +2,10 @@ use anyhow::{Context, Result};
 use rsmpeg::{
     avcodec::AVCodecContext,
     avformat::{AVFormatContextInput, AVFormatContextOutput},
-    avutil::AVFrame,
+    avutil::AVAudioFifo,
+    swresample::SwrContext,
 };
-use std::{
-    ffi::CString,
-    path::{Path, PathBuf},
-};
+use std::{ffi::CString, path::Path};
 
 pub struct VideoAudioEncodeRequest<'a> {
     pub input: &'a Path,
@@ -41,17 +39,16 @@ impl VideoAudioEncodeRequest<'_> {
             .context("output context write header failed")?;
 
         // 4. copy packets
-        let bytes_per_sample =
-            rsmpeg::avutil::get_bytes_per_sample(audio.output_codec_context.sample_fmt).context("get bytes per sample failed")?;
-        debug!("bytes_per_sample={bytes_per_sample}");
-        anyhow::ensure!(rsmpeg::avutil::sample_fmt_is_planar(audio.output_codec_context.sample_fmt));
-        let mut converted_frame = audio.new_frame();
+        let mut fifo = AVAudioFifo::new(
+            audio.output_codec_context.sample_fmt,
+            audio.output_codec_context.ch_layout().nb_channels,
+            1,
+        );
         let frame_size = audio.output_codec_context.frame_size as usize;
-        let mut buffer = AudioBuffer::new(bytes_per_sample);
-        // TODO: https://ffmpeg.org/doxygen/7.0/transcode_aac_8c-example.html
+        let mut converted_frame = audio.new_frame();
+        let mut pts: i64 = 0;
 
         while let Some(mut packet) = i_fmt_ctx.read_packet()? {
-            // debug!(stream_id = packet.stream_index, "received packet from input format context");
             if packet.stream_index == input_video_idx as i32 {
                 packet.rescale_ts(
                     i_fmt_ctx.streams()[input_video_idx].time_base,
@@ -71,13 +68,18 @@ impl VideoAudioEncodeRequest<'_> {
                         .resampler
                         .convert_frame(Some(&frame), &mut converted_frame)
                         .context("convert frame failed")?;
-                    debug_assert!(converted_frame.format == audio.output_codec_context.sample_fmt);
-                    debug_assert!(converted_frame.ch_layout().nb_channels == 1);
-                    converted_frame.set_pts(frame.pts);
+                    converted_frame.set_pts(pts);
+                    pts += converted_frame.nb_samples as i64;
 
-                    buffer.extend(converted_frame.data[0], converted_frame.nb_samples as usize);
-                    while let Some(mut new_frame) = buffer.extract(frame_size, || audio.new_frame())? {
-                        new_frame.set_pts(frame.pts);
+                    unsafe { fifo.write(converted_frame.data.as_ptr(), converted_frame.nb_samples) }?;
+
+                    while fifo.size() as usize >= frame_size {
+                        let mut new_frame = audio.new_frame();
+                        new_frame.set_nb_samples(frame_size as i32);
+                        new_frame.set_pts(pts - frame_size as i64);
+                        new_frame.alloc_buffer()?;
+                        unsafe { fifo.read(new_frame.data.as_ptr(), new_frame.nb_samples) }?;
+
                         audio
                             .output_codec_context
                             .send_frame(Some(&new_frame))
@@ -85,21 +87,31 @@ impl VideoAudioEncodeRequest<'_> {
                         audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
                     }
                 }
-                continue;
             }
         }
-        if !buffer.is_empty() {
-            let last = buffer.finish(|| audio.new_frame())?;
+
+        // 处理 FIFO 中剩余的数据
+        while fifo.size() > 0 {
+            let samples = std::cmp::min(fifo.size(), frame_size as i32);
+            let mut new_frame = audio.new_frame();
+            new_frame.set_nb_samples(samples as i32);
+            new_frame.set_pts(pts - samples as i64);
+            new_frame.alloc_buffer()?;
+            unsafe { fifo.read(new_frame.data.as_ptr(), new_frame.nb_samples) }?;
+
             audio
                 .output_codec_context
-                .send_frame(Some(&last))
-                .context("send last frame failed")?;
+                .send_frame(Some(&new_frame))
+                .context("send remaining frame to output codec context failed")?;
             audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
         }
+
+        // 清空输出编解码器缓冲区
         audio.output_codec_context.send_frame(None)?;
-        // audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
+        audio.flush_output(&i_fmt_ctx, &mut o_fmt_ctx)?;
+
         // 5. write trailer
-        o_fmt_ctx.write_trailer().context("write tailer failed")?;
+        o_fmt_ctx.write_trailer().context("write trailer failed")?;
 
         Ok(())
     }
@@ -142,7 +154,7 @@ impl VideoAudioEncodeRequest<'_> {
         i_codec_ctx.apply_codecpar(&i_stream.codecpar())?;
         i_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1)); // overwrite channel layout
         i_codec_ctx.set_pkt_timebase(i_stream.time_base);
-        i_codec_ctx.open(None).context("input video codec context open failed")?;
+        i_codec_ctx.open(None).context("input audio codec context open failed")?;
         debug!(%i_codec_ctx.sample_rate, %i_codec_ctx.bit_rate, %i_codec_ctx.frame_size, "input audio codec");
 
         // 3. create output audio stream
@@ -199,8 +211,9 @@ struct AudioConfigure {
     pub output_stream_index: usize,
     pub input_codec_context: AVCodecContext,
     pub output_codec_context: AVCodecContext,
-    pub resampler: rsmpeg::swresample::SwrContext,
+    pub resampler: SwrContext,
 }
+
 impl AudioConfigure {
     pub fn new_frame(&self) -> rsmpeg::avutil::AVFrame {
         let mut frame = rsmpeg::avutil::AVFrame::new();
@@ -209,61 +222,16 @@ impl AudioConfigure {
         frame.set_sample_rate(self.output_codec_context.sample_rate);
         frame
     }
+
     pub fn flush_output(&mut self, i_fmt_ctx: &AVFormatContextInput, o_fmt_ctx: &mut AVFormatContextOutput) -> Result<()> {
         while let Ok(mut packet) = self.output_codec_context.receive_packet() {
             packet.set_stream_index(self.output_stream_index as i32);
-            // debug!("output packet pts={:?}", packet.pts);
-            let _from = i_fmt_ctx.streams()[self.input_stream_index].time_base;
-            let _to = o_fmt_ctx.streams()[self.output_stream_index].time_base;
-            packet.rescale_ts(_from, _to);
-            // debug!("after rescale, packet.pts = {}, timebase = {:?} (from {_from:?}", packet.pts, _to);
+            let from = i_fmt_ctx.streams()[self.input_stream_index].time_base;
+            let to = o_fmt_ctx.streams()[self.output_stream_index].time_base;
+            packet.rescale_ts(from, to);
+            // debug!(%packet.pts, %packet.dts, ?from, ?to, "flush output");
             o_fmt_ctx.write_frame(&mut packet).context("write frame failed")?;
         }
         Ok(())
-    }
-}
-
-struct AudioBuffer {
-    pub buffer: Vec<u8>,
-    pub bytes_per_sample: usize,
-}
-impl AudioBuffer {
-    pub fn new(bytes_per_sample: usize) -> Self {
-        Self {
-            buffer: Vec::new(),
-            bytes_per_sample,
-        }
-    }
-    pub fn extend(&mut self, ptr: *const u8, nb_samples: usize) {
-        let size = nb_samples * self.bytes_per_sample;
-        let data = unsafe { std::slice::from_raw_parts(ptr, size) };
-        self.buffer.extend(data);
-    }
-
-    pub fn extract(&mut self, frame_size: usize, frame_maker: impl FnOnce() -> AVFrame) -> Result<Option<AVFrame>> {
-        let size = frame_size * self.bytes_per_sample;
-        if self.buffer.len() < size {
-            return Ok(None);
-        }
-        // fill output
-        let mut new_frame = frame_maker();
-        new_frame.set_nb_samples(frame_size as i32);
-        new_frame.alloc_buffer()?;
-        let buf = unsafe { std::slice::from_raw_parts_mut(new_frame.data[0], size) };
-        buf.copy_from_slice(&self.buffer[0..size]);
-        self.buffer.drain(0..size);
-        Ok(Some(new_frame))
-    }
-    pub fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
-    }
-    pub fn finish(self, frame_maker: impl FnOnce() -> AVFrame) -> Result<AVFrame> {
-        let samples = self.buffer.len() / self.bytes_per_sample;
-        let mut new_frame = frame_maker();
-        new_frame.set_nb_samples(samples as i32);
-        new_frame.alloc_buffer()?;
-        let buf = unsafe { std::slice::from_raw_parts_mut(new_frame.data[0], self.buffer.len()) };
-        buf.copy_from_slice(&self.buffer[0..self.buffer.len()]);
-        Ok(new_frame)
     }
 }
