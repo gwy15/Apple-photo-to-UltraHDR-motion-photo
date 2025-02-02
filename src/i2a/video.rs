@@ -142,15 +142,15 @@ impl VideoAudioEncodeRequest<'_> {
         let input = self.input.to_str().context("input path to_str failed")?;
         let input = CString::new(input)?;
         let mut input_options = None;
-        let input_context = rsmpeg::avformat::AVFormatContextInput::open(&input, None, &mut input_options)?;
-        Ok(input_context)
+        let format_context = rsmpeg::avformat::AVFormatContextInput::open(&input, None, &mut input_options)?;
+        Ok(format_context)
     }
 
     fn output_format_context(&self) -> Result<AVFormatContextOutput> {
         let output = self.output.to_str().context("output path to_str failed")?;
         let output = CString::new(output)?;
-        let output_context = rsmpeg::avformat::AVFormatContextOutput::create(&output, None)?;
-        Ok(output_context)
+        let format_context = rsmpeg::avformat::AVFormatContextOutput::create(&output, None)?;
+        Ok(format_context)
     }
 
     fn get_video_stream_index(i_fmt_ctx: &AVFormatContextInput, o_fmt_ctx: &mut AVFormatContextOutput) -> Result<(usize, usize)> {
