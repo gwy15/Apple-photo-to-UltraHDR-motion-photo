@@ -68,11 +68,6 @@ impl VideoAudioEncodeRequest<'_> {
                 continue;
             }
             if packet.stream_index == audio.input_stream_index as i32 {
-                // debug!(
-                //     "t = {:.3} - {:.3}",
-                //     packet.pts as f64 / ia_timebase.den as f64,
-                //     (packet.dts + packet.duration) as f64 / ia_timebase.den as f64
-                // );
                 audio
                     .input_codec_context
                     .send_packet(Some(&packet))
@@ -94,12 +89,6 @@ impl VideoAudioEncodeRequest<'_> {
                         new_frame.set_pts(pts - fifo.size() as i64);
                         new_frame.alloc_buffer()?;
                         unsafe { fifo.read(new_frame.data.as_ptr(), new_frame.nb_samples) }?;
-
-                        // debug!(
-                        //     "=> t = {:.3} - {:.3}",
-                        //     new_frame.pts as f64 / oa_timebase.den as f64,
-                        //     (new_frame.pts + new_frame.nb_samples as i64) as f64 / oa_timebase.den as f64
-                        // );
 
                         audio
                             .output_codec_context
