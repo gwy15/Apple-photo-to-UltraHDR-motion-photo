@@ -177,13 +177,16 @@ impl VideoAudioEncodeRequest<'_> {
         // let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AC3).context("No encoder builtin.")?;
         let name = CString::new(self.encoder)?;
         let o_codec = rsmpeg::avcodec::AVCodec::find_encoder_by_name(&name).context("No encoder found.")?;
+        debug!("Using encoder {:?}", o_codec.name());
         let mut o_codec_ctx = rsmpeg::avcodec::AVCodecContext::new(&o_codec);
         o_codec_ctx.set_sample_rate(i_codec_ctx.sample_rate);
         o_codec_ctx.set_bit_rate(self.bit_rate);
         o_codec_ctx.set_ch_layout(*rsmpeg::avutil::AVChannelLayout::from_nb_channels(1));
-        o_codec_ctx.set_sample_fmt(rsmpeg::ffi::AV_SAMPLE_FMT_FLTP);
+        o_codec_ctx.set_sample_fmt(o_codec.sample_fmts().unwrap()[0]);
         // See https://github.com/larksuite/rsmpeg/issues/198
-        // o_codec_ctx.set_frame_size(i_codec_ctx.frame_size);
+        // o_codec_ctx.set_frame_size(1024);
+        // o_codec_ctx.set_codec_type(rsmpeg::ffi::AVMEDIA_TYPE_AUDIO);
+        // o_codec_ctx.set_profile(rsmpeg::ffi::FF_PROFILE_AAC_LOW as i32);
         o_codec_ctx.set_pkt_timebase(rsmpeg::avutil::AVRational {
             num: 1,
             den: i_codec_ctx.sample_rate,
