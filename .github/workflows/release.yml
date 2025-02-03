@@ -28,7 +28,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt install -y build-essential apt-utils cmake clang
+          sudo apt install -y build-essential apt-utils cmake clang nasm
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
