@@ -148,6 +148,7 @@ jobs:
 
       - name: Build and install libffmpeg
         run: |
+          ./scripts/mac-install-nasm.sh
           ./scripts/linux-build-libffmpeg.sh deps pkg-config
           cd deps/libffmpeg && make install
 
