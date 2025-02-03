@@ -6,8 +6,7 @@ on:
   push:
     tags:
       - v[0-9]+.[0-9]+.[0-9]+
-  #schedule:
-  #  - cron: '30 4 * * *'
+  pull_request:
   workflow_dispatch:
     inputs:
       tag_name:
@@ -70,6 +69,11 @@ jobs:
           ./scripts/linux-build-libuhdr.sh deps pkg-config
           cmake --install deps/libuhdr/build
 
+      - name: Build and install libffmpeg
+        run: |
+          ./scripts/linux-build-libffmpeg.sh deps pkg-config
+          cd deps/libffmpeg && make install
+
       - name: Compile Rust
         run: |
           export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
@@ -79,12 +83,14 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cp target/release/examples/main main-linux-${{ matrix.runner.arch }}
+          cp target/release/examples/main main
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
-          path: main-linux-${{ matrix.runner.arch }}
+          path: |
+            main
+            README-prebuilt.md
           if-no-files-found: error
           retention-days: 1
 
@@ -139,6 +145,11 @@ jobs:
           ./scripts/linux-build-libuhdr.sh deps pkg-config
           cmake --install deps/libuhdr/build
 
+      - name: Build and install libffmpeg
+        run: |
+          ./scripts/linux-build-libffmpeg.sh deps pkg-config
+          cd deps/libffmpeg && make install
+
       - name: Compile Rust
         run: |
           export PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig):$(realpath pkg-config/lib)
@@ -148,12 +159,14 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           cargo build --example main --release
-          cp target/release/examples/main main-macos-${{ matrix.runner.arch }}
+          cp target/release/examples/main main
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
-          path: main-macos-${{ matrix.runner.arch }}
+          path: |
+            main
+            README-prebuilt.md
           if-no-files-found: error
           retention-days: 1
 
@@ -206,22 +219,25 @@ jobs:
         run: |
           . ./scripts/windows-build.ps1
           Build-Uhdr
-      
+
+      - name: Build and install libffmpeg
+        run: |
+          . ./scripts/windows-build.ps1
+          Build-FFmpeg
+
       - name: Compile Rust
         run: |
           $env:VCPKG_ROOT="C:\vcpkg"
           . ./scripts/windows-build.ps1
           Compile-Rust
           cp target/release/examples/main.exe main.exe
-          cp deps/install/bin/turbojpeg.dll ./
-          cp deps/install/bin/jpeg62.dll ./
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.runner.os }}-${{ matrix.runner.arch }}
           path: |
             main.exe
-            ./*.dll
+            README-prebuilt.md
 
           if-no-files-found: error
           retention-days: 1
@@ -250,9 +266,9 @@ jobs:
       - name: List downloaded files
         run: |
           tree -L 3
-          zip -r windows-x64.zip windows-*/
 
       - uses: softprops/action-gh-release@v2
+        if: github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -265,3 +281,4 @@ jobs:
             ./*.zip
             ./*/main-macos*
             ./*/main-linux*
+            ./*/main-windows*

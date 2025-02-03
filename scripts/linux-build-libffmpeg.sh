@@ -15,9 +15,6 @@ fi
 cd $path
 # rsmpeg only supports full build as of now. https://github.com/CCExtractor/rusty_ffmpeg/issues/128
 ./configure --prefix=$install \
-    --enable-gpl --disable-programs \
-    --disable-doc --disable-network \
+    --disable-programs --disable-doc --disable-network \
     --disable-metal
-    # --disable-avdevice --disable-swscale --disable-postproc \
-    # --disable-avfilter
 make -j
