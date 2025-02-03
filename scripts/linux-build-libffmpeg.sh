@@ -17,4 +17,4 @@ cd $path
 ./configure --prefix=$install \
     --disable-programs --disable-doc --disable-network \
     --disable-metal
-make -j
+make -j3
