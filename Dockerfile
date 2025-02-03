@@ -14,6 +14,8 @@ RUN ./scripts/linux-build-libheif.sh deps pkg-config && \
     cmake --install deps/libheif/build
 RUN ./scripts/linux-build-libuhdr.sh deps pkg-config && \
     cmake --install deps/libuhdr/build
+RUN ./scripts/linux-build-libffmpeg.sh deps pkg-config && \
+    cmake --install deps/libffmpeg/build
 
 RUN env PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig) PKG_CONFIG_LIBDIR=$(realpath pkg-config/lib) \
         PKG_CONFIG_ALL_STATIC=true \

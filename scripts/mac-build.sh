@@ -17,7 +17,7 @@ sudo cmake --install $root/libheif/build
 $scripts/linux-build-libuhdr.sh $root $install
 sudo cmake --install $root/libuhdr/build
 
-$scripts/linux-build-ffmpeg.sh $root $install
+$scripts/linux-build-libffmpeg.sh $root $install
 sudo make --directory=$root/libffmpeg install
 
 export PKG_CONFIG_PATH=$install/lib/pkgconfig PKG_CONFIG_LIBDIR=$install/lib \

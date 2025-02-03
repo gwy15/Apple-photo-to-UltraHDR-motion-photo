@@ -12,26 +12,18 @@ Function Build-Jpeg {
         git clone --depth 1 --branch 3.1.0 https://github.com/libjpeg-turbo/libjpeg-turbo.git $src
     }
 
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$install" -S $src -B $src/build
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$install" `
+        -DWITH_JPEG8=1 -DENABLE_SHARED=OFF -DENABLE_STATIC=ON `
+        -S $src -B $src/build
     cmake --build $src/build --config Release
     cmake --install $src/build
+    # workaround for turbojpeg
+    cp $install/lib/jpeg-static.lib $install/lib/jpeg.lib
+    cp $install/lib/turbojpeg-static.lib $install/lib/turbojpeg.lib
 }
 Function Build-Heif {
     # As per https://github.com/Cykooz/libheif-sys/blob/master/build.rs, libheif is only supported through vcpkg
     vcpkg install libheif --triplet x64-windows-static-md
-    # $src = [System.IO.Path]::GetFullPath("./deps/libheif")
-
-    # if (-Not (Test-Path -Path $src)) {
-    #     git clone https://github.com/strukturag/libheif.git $src
-    # }
-
-    # cmake --preset=release-noplugins `
-    #     -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX="$install" `
-    #     -DWITH_UNCOMPRESSED_CODEC=OFF -DWITH_HEADER_COMPRESSION=OFF `
-    #     -DWITH_AOM_DECODER=OFF -DWITH_AOM_ENCODER=OFF `
-    #     -DWITH_EXAMPLES=OFF -S $src -B $src/build
-    # cmake --build $src/build --config Release
-    # cmake --install $src/build
 }
 # depends on libjpeg
 Function Build-Uhdr {
@@ -51,6 +43,10 @@ Function Build-Uhdr {
     cp "$src/ultrahdr_api.h" "$install/include/"
 }
 
+Function Build-FFmpeg {
+    vcpkg install ffmpeg --triplet x64-windows-static-md
+}
+
 Function Compile-Rust {
     $env:PKG_CONFIG_ALL_STATIC = "true"
 
@@ -59,11 +55,10 @@ Function Compile-Rust {
     $env:UHDR_HEADER = "$install/include/ultrahdr_api.h"
 
     # for turbojpeg-sys, set precompiled lib
-    $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_STATIC = "1"
-    $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_LIB_DIR = "$install/lib"
-    $env:X86_64_PC_WINDOWS_MSVC_TURBOJPEG_INCLUDE_DIR = "$install/include"
+    $env:TURBOJPEG_STATIC = "1"
+    $env:TURBOJPEG_LIB_DIR = "$install/lib"
+    $env:TURBOJPEG_INCLUDE_DIR = "$install/include"
 
-    # fixme: dynamically linked to jpeg62.dll and turbojpeg.dll
     $env:PATH = "$env:PATH;$env:UHDR_LIB_PATH;$root/deps/install/bin"
 
     cargo build --example main --release
