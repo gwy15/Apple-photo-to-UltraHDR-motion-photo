@@ -44,7 +44,7 @@ Function Build-Uhdr {
 }
 
 Function Build-FFmpeg {
-    vcpkg install ffmpeg --triplet x64-windows-static-md
+    vcpkg install ffmpeg --triplet x64-windows-static-md-release
 }
 
 Function Compile-Rust {
