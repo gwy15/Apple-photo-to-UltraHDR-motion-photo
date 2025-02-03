@@ -82,6 +82,7 @@ jobs:
           export TURBOJPEG_STATIC=1
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
+          export FFMPEG_PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
           cargo build --example main --release
           cp target/release/examples/main main
 
