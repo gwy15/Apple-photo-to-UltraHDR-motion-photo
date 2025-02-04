@@ -26,7 +26,7 @@ turbojpeg-sys = { version = "1", default-features = false }
 rayon = "1.10.0"
 
 [dependencies.rsmpeg]
-version = "0.15"
+version = "0.15.1"
 default-features = false
 features = ["ffmpeg7"]
 
