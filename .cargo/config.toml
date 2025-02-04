@@ -1,0 +1,16 @@
+[target.x86_64-pc-windows-msvc]
+# https://github.com/ImageOptim/gifski/issues/226#issuecomment-1172941541
+rustflags = [
+    "-C", "link-arg=dxva2.lib",
+    "-C", "link-arg=evr.lib",
+    "-C", "link-arg=mf.lib",
+    "-C", "link-arg=mfplat.lib",
+    "-C", "link-arg=mfplay.lib",
+    "-C", "link-arg=mfreadwrite.lib",
+    "-C", "link-arg=mfuuid.lib",
+    "-C", "link-arg=bcrypt.lib",
+    "-C", "link-arg=ws2_32.lib",
+    "-C", "link-arg=Secur32.lib",
+    "-C", "link-arg=Strmiids.lib",
+    "-C", "link-arg=Ole32.lib"
+]
