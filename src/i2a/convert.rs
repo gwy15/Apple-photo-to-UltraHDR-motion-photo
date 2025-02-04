@@ -13,6 +13,7 @@ impl ConvertRequest {
     ///
     /// # Reference
     /// 1. https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos
+    #[tracing::instrument(skip_all)]
     pub(crate) fn convert_heic_to_jpg(&self) -> anyhow::Result<()> {
         anyhow::ensure!(self.is_input_heic()?, "Not a heic file");
         self.do_convert_heic_to_jpg(&self.image_path, &self.output_path)
@@ -212,7 +213,6 @@ impl ConvertRequest {
         Ok(jpg)
     }
 
-    #[tracing::instrument(skip_all)]
     fn do_convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
         let profile = self.exif_tool().get_value(src, "ProfileDescription")?;
         if let Some(profile) = profile.as_ref() {

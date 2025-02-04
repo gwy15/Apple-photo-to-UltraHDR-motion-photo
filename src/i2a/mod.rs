@@ -91,6 +91,7 @@ impl ConvertRequest {
         Ok(guard)
     }
 
+    #[instrument(skip_all)]
     fn make_motion(&self) -> anyhow::Result<()> {
         if self.output_is_motion_photo()? {
             warn!("Output is already a motion photo, skip append video");
@@ -98,10 +99,38 @@ impl ConvertRequest {
             return Ok(());
         }
 
-        // TODO: convert mov to mp4 (and ensure audio codec is supported)
-        self.append_video()?;
-        self.update_motion_photo_exif()?;
+        // convert mov to mp4 (and ensure audio codec is supported)
+        let audio_codec = video::VideoUtils::get_audio_codec(&self.video_path)?;
+        debug!(%audio_codec, "input video");
+        if audio_codec == "aac" || audio_codec == "ac3" {
+            self.append_video(&self.video_path)?;
+            self.update_motion_photo_exif(&self.video_path)?;
+            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            return Ok(());
+        }
 
+        let video_name = self.video_path.file_stem().context("parse video path filename failed")?;
+        let tmp_video_name = format!("{}-aac-converting.mp4", video_name.to_string_lossy());
+        let tmp_video = self.video_path.with_file_name(tmp_video_name);
+        anyhow::ensure!(!tmp_video.exists(), "tempfile exists");
+        let _guard = utils::Guard::new(|| {
+            std::fs::remove_file(&tmp_video).ok();
+        });
+
+        info_span!("transcode_aac_audio")
+            .in_scope(|| {
+                video::VideoAudioEncodeRequest {
+                    input: &self.video_path,
+                    output: &tmp_video,
+                    bit_rate: 128 << 10,
+                    encoder: "aac",
+                }
+                .execute()
+            })
+            .context("convert video audio to aac failed")?;
+
+        self.append_video(&tmp_video)?;
+        self.update_motion_photo_exif(&tmp_video)?;
         Self::sync_file_times(&self.image_path, &self.output_path)?;
         Ok(())
     }

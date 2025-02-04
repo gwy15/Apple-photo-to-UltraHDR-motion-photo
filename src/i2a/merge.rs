@@ -50,9 +50,9 @@ impl ConvertRequest {
         std::io::copy(&mut image, &mut output)?;
         Ok(())
     }
-    pub(crate) fn append_video(&self) -> anyhow::Result<()> {
+    pub(crate) fn append_video(&self, video: &Path) -> anyhow::Result<()> {
         let mut output = std::fs::File::options().append(true).truncate(false).open(&self.output_path)?;
-        let mut video = std::fs::File::open(&self.video_path)?;
+        let mut video = std::fs::File::open(&video)?;
         std::io::copy(&mut video, &mut output)?;
         Ok(())
     }
@@ -83,7 +83,7 @@ impl ConvertRequest {
         Ok(micro_video.is_some())
     }
 
-    pub(crate) fn update_motion_photo_exif(&self) -> anyhow::Result<()> {
+    pub(crate) fn update_motion_photo_exif(&self, video_path: &Path) -> anyhow::Result<()> {
         // release exiftool.config
         use std::io::Write;
         const EXIFTOOL_CONFIG: &str = include_str!("exiftool.config");
@@ -92,7 +92,7 @@ impl ConvertRequest {
         temp_config.flush()?;
 
         let mut cmd = self.exif_tool().command();
-        let video_size = self.video_path.metadata()?.len();
+        let video_size = video_path.metadata()?.len();
         cmd.args(["-config", temp_config.path().to_str().unwrap()])
             .args([
                 "-XMP-GCamera:MicroVideo=1",

@@ -252,3 +252,19 @@ impl AudioConfigure {
         Ok(())
     }
 }
+
+pub struct VideoUtils {}
+impl VideoUtils {
+    pub fn get_audio_codec(path: &Path) -> anyhow::Result<String> {
+        let path = CString::new(path.to_string_lossy().to_string())?;
+        let mut options = None;
+        let format_context = rsmpeg::avformat::AVFormatContextInput::open(&path, None, &mut options)?;
+
+        let (_, codec) = format_context
+            .find_best_stream(rsmpeg::ffi::AVMEDIA_TYPE_AUDIO)
+            .context("find best stream failed")?
+            .context("No sound found")?;
+        let codec = codec.name().to_string_lossy().into_owned();
+        Ok(codec)
+    }
+}
