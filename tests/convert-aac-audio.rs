@@ -5,7 +5,7 @@ fn main() {
     motion::i2a::video::VideoAudioEncodeRequest {
         input: "./tests/IMG_3853.MOV".as_ref(),
         // input: "./tests/IMG_3281.MOV".as_ref(),
-        output: "./testoutput/output.mp4".as_ref(),
+        output: "./testoutput/IMG_3853-aac.mp4".as_ref(),
         encoder: "aac",
         bit_rate: 128_000,
     }

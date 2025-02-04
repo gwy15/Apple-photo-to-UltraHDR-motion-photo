@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [[example]]
-path = "examples/simple.rs"
-name = "simple"
-
-[[example]]
 path = "examples/main.rs"
 name = "main"
 
