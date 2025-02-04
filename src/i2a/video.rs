@@ -174,7 +174,6 @@ impl VideoAudioEncodeRequest<'_> {
         let mut o_stream = o_fmt_ctx.new_stream();
         let output_stream_index = o_stream.index as usize;
         // 4. create output audio codec context
-        // let o_codec = rsmpeg::avcodec::AVCodec::find_encoder(rsmpeg::ffi::AV_CODEC_ID_AC3).context("No encoder builtin.")?;
         let name = CString::new(self.encoder)?;
         let o_codec = rsmpeg::avcodec::AVCodec::find_encoder_by_name(&name).context("No encoder found.")?;
         debug!("Using encoder {:?}", o_codec.name());
