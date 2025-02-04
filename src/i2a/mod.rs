@@ -38,30 +38,15 @@ impl ConvertRequest {
             self.video_path.display(),
             self.output_path.display(),
         );
-        let t = std::time::Instant::now();
+
         self.check_valid().context("request arguments invalid")?;
+        let t = std::time::Instant::now();
 
         // 1. convert image
-        match self.is_input_heic()? {
-            true => self.convert_heic_to_jpg()?,
-            false => self.copy_image()?,
-        }
-        let mut guard = utils::Guard::new(|| {
-            // in case rest failed, remove generated output
-            std::fs::remove_file(&self.output_path).ok();
-        });
-        debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
+        let mut guard = self.make_hdr()?;
 
         // 2. append video
-        match self.output_is_motion_photo()? {
-            true => warn!("Output is already a motion photo, skip append video"),
-            false => {
-                // TODO: convert mov to mp4 (and ensure audio codec is supported)
-                self.append_video()?;
-                self.update_motion_photo_exif()?;
-            }
-        }
-        Self::sync_file_times(&self.image_path, &self.output_path)?;
+        self.make_motion()?;
 
         #[rustfmt::skip]
         let output_size = self.output_path.metadata().context("Output is gone")?.len() as f32 / 1024.0 / 1024.0;
@@ -90,5 +75,34 @@ impl ConvertRequest {
             Some(path) => crate::utils::ExifTool::with_path(path.clone()),
             None => crate::utils::ExifTool::new(),
         }
+    }
+
+    fn make_hdr(&self) -> anyhow::Result<utils::Guard<impl FnOnce() + '_>> {
+        let t = std::time::Instant::now();
+        match self.is_input_heic()? {
+            true => self.convert_heic_to_jpg()?,
+            false => self.copy_image()?,
+        }
+        let guard = utils::Guard::new(|| {
+            // in case rest failed, remove generated output
+            std::fs::remove_file(&self.output_path).ok();
+        });
+        debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
+        Ok(guard)
+    }
+
+    fn make_motion(&self) -> anyhow::Result<()> {
+        if self.output_is_motion_photo()? {
+            warn!("Output is already a motion photo, skip append video");
+            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            return Ok(());
+        }
+
+        // TODO: convert mov to mp4 (and ensure audio codec is supported)
+        self.append_video()?;
+        self.update_motion_photo_exif()?;
+
+        Self::sync_file_times(&self.image_path, &self.output_path)?;
+        Ok(())
     }
 }
