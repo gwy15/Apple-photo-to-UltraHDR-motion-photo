@@ -269,19 +269,18 @@ jobs:
       - name: List downloaded files
         run: |
           tree -L 3
+          zip macos-intel.zip mac*-intel/*
+          zip macos-arm64.zip mac*-arm64/*
+          zip linux-x64.zip   ubuntu*/*
+          zip windows-x64.zip windows-*-x64/*
 
       - uses: softprops/action-gh-release@v2
         if: github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # needs newer release, but add it once available
-          #fail_on_unmatched_files: true
           body: ${{ env.BODY }}
           prerelease: ${{ env.TAG_NAME == 'nightly' }}
           tag_name: ${{ env.TAG_NAME }}
           files: |
             ./*.zip
-            ./*/main-macos*
-            ./*/main-linux*
-            ./*/main-windows*
