@@ -170,7 +170,7 @@ impl VideoAudioEncodeRequest<'_> {
         debug!(%i_codec_ctx.sample_rate, %i_codec_ctx.bit_rate, %i_codec_ctx.frame_size, "input audio codec");
 
         // 3. create output audio stream
-        let global_header = (o_fmt_ctx.flags | rsmpeg::ffi::AVFMT_GLOBALHEADER as i32) != 0;
+        let global_header = (o_fmt_ctx.flags & rsmpeg::ffi::AVFMT_GLOBALHEADER as i32) != 0;
         let mut o_stream = o_fmt_ctx.new_stream();
         let output_stream_index = o_stream.index as usize;
         // 4. create output audio codec context
@@ -195,7 +195,7 @@ impl VideoAudioEncodeRequest<'_> {
             den: o_codec_ctx.sample_rate,
         });
         if global_header {
-            o_codec_ctx.set_flags(rsmpeg::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
+            o_codec_ctx.set_flags(o_codec_ctx.flags | rsmpeg::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
         }
         o_stream.set_time_base(o_codec_ctx.time_base);
 
