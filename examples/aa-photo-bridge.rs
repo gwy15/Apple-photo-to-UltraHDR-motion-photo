@@ -9,7 +9,7 @@ use tracing::*;
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 use tracing_subscriber::prelude::*;
 
-type Task = motion::i2a::ConvertRequest;
+type Task = aa_photo_bridge::i2a::ConvertRequest;
 
 #[derive(Parser)]
 pub struct Args {

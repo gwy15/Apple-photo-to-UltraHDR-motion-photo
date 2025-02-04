@@ -20,12 +20,12 @@ RUN ./scripts/linux-build-libffmpeg.sh deps pkg-config && \
 RUN env PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig) PKG_CONFIG_LIBDIR=$(realpath pkg-config/lib) \
         PKG_CONFIG_ALL_STATIC=true \
         TURBOJPEG_STATIC=1 TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib) TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include) \
-    cargo build --example main --release
+    cargo build --example aa-photo-bridge --release
 
 # runtime
 FROM debian:bookworm
 WORKDIR /code
 
 RUN apt-get update && apt-get install exiftool -y
-COPY --from=builder /code/target/release/examples/main ./main
-ENTRYPOINT ["/code/main"]
+COPY --from=builder /code/target/release/examples/aa-photo-bridge ./aa-photo-bridge
+ENTRYPOINT ["/code/aa-photo-bridge"]

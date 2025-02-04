@@ -19,5 +19,5 @@ sudo cmake --install $root/libuhdr/build
 env PKG_CONFIG_PATH=$install/lib/pkgconfig PKG_CONFIG_LIBDIR=$install/lib \
     PKG_CONFIG_ALL_STATIC=true \
     TURBOJPEG_STATIC=1 TURBOJPEG_LIB_DIR=$install/lib TURBOJPEG_INCLUDE_PATH=$install/include \
-    cargo build --example main --release
-ldd target/release/examples/main
+    cargo build --example aa-photo-bridge --release
+ldd target/release/examples/aa-photo-bridge

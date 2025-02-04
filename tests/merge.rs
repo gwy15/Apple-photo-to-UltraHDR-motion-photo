@@ -9,7 +9,7 @@ fn main() {
         std::fs::remove_file(&output).unwrap();
     }
 
-    motion::i2a::ConvertRequest {
+    aa_photo_bridge::i2a::ConvertRequest {
         image_path: "./tests/IMG_3853.HEIC".into(),
         video_path: "./tests/IMG_3853.MOV".into(),
         output_path: output,

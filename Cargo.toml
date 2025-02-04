@@ -1,11 +1,11 @@
 [package]
-name = "motion"
+name = "aa-photo-bridge"
 version = "0.1.0"
 edition = "2021"
 
 [[example]]
-path = "examples/main.rs"
-name = "main"
+path = "examples/aa-photo-bridge.rs"
+name = "aa-photo-bridge"
 
 [profile.release]
 lto = true

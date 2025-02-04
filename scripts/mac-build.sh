@@ -25,5 +25,5 @@ export PKG_CONFIG_PATH=$install/lib/pkgconfig PKG_CONFIG_LIBDIR=$install/lib \
     TURBOJPEG_STATIC=1 TURBOJPEG_LIB_DIR=$install/lib TURBOJPEG_INCLUDE_PATH=$install/include \
     FFMPEG_PKG_CONFIG_PATH=$install/lib/pkgconfig
 
-cargo build --example main --release
-otool -L target/release/examples/main
+cargo build --example aa-photo-bridge --release
+otool -L target/release/examples/aa-photo-bridge

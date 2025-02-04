@@ -27,7 +27,7 @@ See `scripts/ghw-build.sh` or workflow file.
 
 ## Usage
 ```
-Usage: main.exe [OPTIONS] --original <ORIGINAL> <PATH>
+Usage: aa-photo-bridge.exe [OPTIONS] --original <ORIGINAL> <PATH>
 
 Arguments:
   <PATH>  Path to the directory containing images and videos to convert
@@ -57,9 +57,9 @@ Options:
 
 ## Example
 ```bash
-main d:\tmp\iPhone -o delete -e 'c:\Program Files\exiftool\exiftool.exe' -j --strict
+aa-photo-bridge d:\tmp\iPhone -o delete -e 'c:\Program Files\exiftool\exiftool.exe' -j --strict
 # i.e.,
-main d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exiftool\exiftool.exe' -j --strict
+aa-photo-bridge d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exiftool\exiftool.exe' -j --strict
 ```
 
 ## Known problems
