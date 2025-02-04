@@ -9,7 +9,7 @@ impl ConvertRequest {
         self.image_path.extension().context("No extension found for image path")
     }
 
-    /// convert heic to jpg
+    /// convert heic to jpg, save to output_path
     ///
     /// # Reference
     /// 1. https://developer.apple.com/documentation/appkit/applying-apple-hdr-effect-to-your-photos

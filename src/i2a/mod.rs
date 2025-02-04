@@ -41,35 +41,27 @@ impl ConvertRequest {
         let t = std::time::Instant::now();
         self.check_valid().context("request arguments invalid")?;
 
-        // convert image
-        if !self.io_same_file() {
-            match self.is_input_heic()? {
-                true => self.convert_heic_to_jpg()?,
-                false => self.copy_image()?,
-            }
+        // 1. convert image
+        match self.is_input_heic()? {
+            true => self.convert_heic_to_jpg()?,
+            false => self.copy_image()?,
         }
-        debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
-        // in case rest failed, remove generated output
         let mut guard = utils::Guard::new(|| {
-            if !self.io_same_file() {
-                std::fs::remove_file(&self.output_path).ok();
-            }
+            // in case rest failed, remove generated output
+            std::fs::remove_file(&self.output_path).ok();
         });
+        debug!("jpg ensured (with HDR effect), time={:?}", t.elapsed());
 
+        // 2. append video
         match self.output_is_motion_photo()? {
-            true => {
-                warn!("Output is already a motion photo, skip append video");
-            }
+            true => warn!("Output is already a motion photo, skip append video"),
             false => {
-                // TODO: convert mov to mp4 (and ensure ac3 audio)
+                // TODO: convert mov to mp4 (and ensure audio codec is supported)
                 self.append_video()?;
                 self.update_motion_photo_exif()?;
             }
         }
-        match self.io_same_file() {
-            true => Self::sync_file_times(&self.video_path, &self.output_path)?,
-            false => Self::sync_file_times(&self.image_path, &self.output_path)?,
-        }
+        Self::sync_file_times(&self.image_path, &self.output_path)?;
 
         #[rustfmt::skip]
         let output_size = self.output_path.metadata().context("Output is gone")?.len() as f32 / 1024.0 / 1024.0;

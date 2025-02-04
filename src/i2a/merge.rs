@@ -30,7 +30,10 @@ impl ConvertRequest {
             ["jpg", "jpeg"].iter().any(|e| output_ext.eq_ignore_ascii_case(e)),
             "Output path must have jpg extension"
         );
-        if !self.io_same_file() && self.output_path.exists() {
+        if self.io_same_file() {
+            bail!("Input image and output image is same file");
+        }
+        if self.output_path.exists() {
             bail!("Output file already exists");
         }
         let parent = self.output_path.parent().context("Invalid output path: no parent")?;
@@ -40,6 +43,7 @@ impl ConvertRequest {
         Ok(())
     }
 
+    /// Copy image_path to output_path
     pub(crate) fn copy_image(&self) -> anyhow::Result<()> {
         let mut output = std::fs::File::create(&self.output_path)?;
         let mut image = std::fs::File::open(&self.image_path)?;
