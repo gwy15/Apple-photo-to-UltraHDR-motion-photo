@@ -13,6 +13,7 @@ Depends on several packages:
 - libheif
 - libultrahdr -> libjpeg (dummy for libturbojpeg)
 - libturbojpeg
+- libffmpeg (LGPL)
 
 ### Build on Linux
 See `scripts/ghw-build.sh` or workflow file.
