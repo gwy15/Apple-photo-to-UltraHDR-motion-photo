@@ -16,15 +16,15 @@ Depends on several packages:
 - libffmpeg (LGPL)
 
 ### Build on Linux
-See `scripts/ghw-build.sh` or workflow file.
+See workflow file.
 
 ### Build on Windows
 vcpkg and VS required.
 
-See `scripts/windows-build.ps1` or workflow file.
+See workflow file.
 
 ### Build on Mac
-See `scripts/ghw-build.sh` or workflow file.
+See workflow file.
 
 ## Usage
 ```
