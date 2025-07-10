@@ -21,17 +21,20 @@ impl VideoAudioEncodeRequest<'_> {
 
     pub fn execute(&self) -> Result<()> {
         // 1.a open input
-        let mut i_fmt_ctx = self.input_format_context()?;
+        let mut i_fmt_ctx = self.input_format_context().context("create input format context failed")?;
 
         // 1.b open output
-        let mut o_fmt_ctx = self.output_format_context()?;
+        let mut o_fmt_ctx = self.output_format_context().context("create output format context failed")?;
 
         // 2.a configurations: video
-        let (input_video_idx, output_video_idx) = Self::get_video_stream_index(&i_fmt_ctx, &mut o_fmt_ctx)?;
+        let (input_video_idx, output_video_idx) =
+            Self::get_video_stream_index(&i_fmt_ctx, &mut o_fmt_ctx).context("get video stream index failed")?;
         debug!(%input_video_idx, %output_video_idx, "video configured");
 
         // 2.b configurations: audio
-        let mut audio = self.get_audio_configure(&i_fmt_ctx, &mut o_fmt_ctx)?;
+        let mut audio = self
+            .get_audio_configure(&i_fmt_ctx, &mut o_fmt_ctx)
+            .context("get audio configure failed")?;
         debug!(
             input_audio_idx = audio.input_stream_index,
             output_audio_idx = audio.output_stream_index,
@@ -57,14 +60,14 @@ impl VideoAudioEncodeRequest<'_> {
             audio.input_codec_context.frame_size, audio.output_codec_context.frame_size
         );
 
-        while let Some(mut packet) = i_fmt_ctx.read_packet()? {
+        while let Some(mut packet) = i_fmt_ctx.read_packet().context("read packet failed")? {
             if packet.stream_index == input_video_idx as i32 {
                 packet.rescale_ts(
                     i_fmt_ctx.streams()[input_video_idx].time_base,
                     o_fmt_ctx.streams()[output_video_idx].time_base,
                 );
                 packet.set_stream_index(output_video_idx as i32);
-                o_fmt_ctx.write_frame(&mut packet)?;
+                o_fmt_ctx.write_frame(&mut packet).context("o_fmt_ctx write frame failed")?;
                 continue;
             }
             if packet.stream_index == audio.input_stream_index as i32 {
@@ -255,16 +258,18 @@ impl AudioConfigure {
 
 pub struct VideoUtils {}
 impl VideoUtils {
-    pub fn get_audio_codec(path: &Path) -> anyhow::Result<String> {
+    pub fn get_audio_codec(path: &Path) -> anyhow::Result<Option<String>> {
         let path = CString::new(path.to_string_lossy().to_string())?;
         let mut options = None;
         let format_context = rsmpeg::avformat::AVFormatContextInput::open(&path, None, &mut options)?;
 
-        let (_, codec) = format_context
+        let stream = format_context
             .find_best_stream(rsmpeg::ffi::AVMEDIA_TYPE_AUDIO)
-            .context("find best stream failed")?
-            .context("No sound found")?;
+            .context("find best stream failed")?;
+        let Some((_, codec)) = stream else {
+            return Ok(None);
+        };
         let codec = codec.name().to_string_lossy().into_owned();
-        Ok(codec)
+        Ok(Some(codec))
     }
 }
