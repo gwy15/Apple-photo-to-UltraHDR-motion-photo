@@ -97,7 +97,7 @@ impl ConvertRequest {
     fn make_motion(&self) -> anyhow::Result<()> {
         if self.output_is_motion_photo()? {
             warn!("Output is already a motion photo, skip append video");
-            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            self.sync_file_times(&self.image_path, &self.output_path)?;
             return Ok(());
         }
 
@@ -106,14 +106,14 @@ impl ConvertRequest {
             debug!("no audio in video, append");
             self.append_video(&self.video_path)?;
             self.update_motion_photo_exif(&self.video_path)?;
-            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            self.sync_file_times(&self.image_path, &self.output_path)?;
             return Ok(());
         };
         debug!(%audio_codec, "input video");
         if audio_codec == "aac" || audio_codec == "ac3" {
             self.append_video(&self.video_path)?;
             self.update_motion_photo_exif(&self.video_path)?;
-            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            self.sync_file_times(&self.image_path, &self.output_path)?;
             return Ok(());
         }
 
@@ -139,7 +139,7 @@ impl ConvertRequest {
 
         self.append_video(&tmp_video)?;
         self.update_motion_photo_exif(&tmp_video)?;
-        Self::sync_file_times(&self.image_path, &self.output_path)?;
+        self.sync_file_times(&self.image_path, &self.output_path)?;
         Ok(())
     }
 }

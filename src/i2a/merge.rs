@@ -58,7 +58,7 @@ impl ConvertRequest {
         Ok(())
     }
 
-    pub(crate) fn sync_file_times(src: &Path, dst: &Path) -> Result<()> {
+    pub(crate) fn sync_file_times(&self, src: &Path, dst: &Path) -> Result<()> {
         #[cfg(target_os = "macos")]
         use std::os::macos::fs::FileTimesExt;
         #[cfg(target_os = "windows")]
