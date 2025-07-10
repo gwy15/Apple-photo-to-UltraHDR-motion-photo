@@ -28,6 +28,11 @@ pub struct Args {
     /// What to do with the original files.
     pub original: Original,
 
+    /// Add some suffix in output file to avoid filename collision. For example, 
+    /// "--output-suffix _merge"
+    #[clap(long)]
+    pub output_suffix: Option<String>,
+
     #[clap(long)]
     /// Image extensions. Default: "heic,jpg,jpeg"
     image_extensions: Option<String>,
@@ -162,7 +167,13 @@ impl Args {
         }
         let video_path = found_video.pop().unwrap();
 
-        let output_path = path.with_extension("jpg");
+        let mut output_path = path.with_extension("jpg");
+        if let Some(suffix) = self.output_suffix.as_deref() {
+            let stem = output_path.file_stem().unwrap().to_str().unwrap();
+            let extension = output_path.extension().unwrap().to_str().unwrap();
+            let suffixed_filename = format!("{stem}{suffix}.{extension}");
+            output_path.set_file_name(suffixed_filename);
+        }
         tasks.push(Task {
             image_path,
             video_path,
