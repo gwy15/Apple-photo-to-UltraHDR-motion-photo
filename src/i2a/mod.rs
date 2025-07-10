@@ -103,7 +103,13 @@ impl ConvertRequest {
         }
 
         // convert mov to mp4 (and ensure audio codec is supported)
-        let audio_codec = video::VideoUtils::get_audio_codec(&self.video_path)?;
+        let Some(audio_codec) = video::VideoUtils::get_audio_codec(&self.video_path)? else {
+            debug!("no audio in video, append");
+            self.append_video(&self.video_path)?;
+            self.update_motion_photo_exif(&self.video_path)?;
+            Self::sync_file_times(&self.image_path, &self.output_path)?;
+            return Ok(());
+        };
         debug!(%audio_codec, "input video");
         if audio_codec == "aac" || audio_codec == "ac3" {
             self.append_video(&self.video_path)?;
