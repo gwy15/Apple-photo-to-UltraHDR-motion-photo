@@ -48,6 +48,18 @@ impl ConvertRequest {
         let mut output = std::fs::File::create(&self.output_path)?;
         let mut image = std::fs::File::open(&self.image_path)?;
         std::io::copy(&mut image, &mut output)?;
+        std::mem::drop(output);
+
+        if self.strip_original_exif {
+            let mut cmd = self.exif_tool().command();
+            cmd.arg("-All=").arg(&self.output_path);
+            let output = cmd.output().context("Run exiftool strip failed")?;
+            if !output.status.success() {
+                info!("Failed to run task: {:?}", cmd);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                bail!("Run exiftool failed when stripping all exif: {}", stderr);
+            }
+        }
         Ok(())
     }
     pub(crate) fn append_video(&self, video: &Path) -> anyhow::Result<()> {

@@ -13,6 +13,8 @@ pub struct ConvertRequest {
     pub output_path: PathBuf,
     // 用 exiftool 实现 exif 写入
     pub exiftool_path: Option<PathBuf>,
+    
+    pub strip_original_exif: bool,
 
     /// [0, 100]
     pub image_quality: i32,

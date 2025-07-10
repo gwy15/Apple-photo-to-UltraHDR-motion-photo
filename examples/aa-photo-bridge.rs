@@ -28,6 +28,11 @@ pub struct Args {
     /// What to do with the original files.
     pub original: Original,
 
+    #[clap(long)]
+    /// For sina images, exiftool may have problem parsing exif infos.
+    /// Use this flag to strip all exif infos before writing new ones.
+    pub strip_original_exif: bool,
+
     /// Add some suffix in output file to avoid filename collision. For example, 
     /// "--output-suffix _merge"
     #[clap(long)]
@@ -181,6 +186,7 @@ impl Args {
             exiftool_path: self.exiftool.clone(),
             image_quality: self.image_quality,
             gainmap_quality: self.gainmap_quality,
+            strip_original_exif: self.strip_original_exif, 
         });
         Ok(())
     }
