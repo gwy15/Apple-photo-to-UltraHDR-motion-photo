@@ -103,10 +103,11 @@ impl ConvertRequest {
             .arg("-XiaomiTag=1")
             .arg("-overwrite_original")
             .arg(&self.output_path);
-        let output = cmd.output().context("Run exiftool failed")?;
+        let output = cmd.output().context("Run exiftool failed when writing tags")?;
         if !output.status.success() {
+            info!("Failed to run task: {:?}", cmd);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("Run exiftool failed: {}", stderr);
+            bail!("Run exiftool failed when writing exif tags: {}", stderr);
         }
 
         /* 小米的 tag 写不进去，放弃 exiv2 库
