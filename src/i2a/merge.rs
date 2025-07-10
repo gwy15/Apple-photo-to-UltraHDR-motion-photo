@@ -33,7 +33,7 @@ impl ConvertRequest {
         if self.io_same_file() {
             bail!("Input image and output image is same file");
         }
-        if self.output_path.exists() {
+        if self.output_path.exists() && !self.overwrite_existing {
             bail!("Output file already exists");
         }
         let parent = self.output_path.parent().context("Invalid output path: no parent")?;

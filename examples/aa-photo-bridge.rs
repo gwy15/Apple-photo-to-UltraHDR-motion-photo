@@ -33,6 +33,10 @@ pub struct Args {
     /// Use this flag to strip all exif infos before writing new ones.
     pub strip_original_exif: bool,
 
+    #[clap(long)]
+    /// Overwrite output file if already exist.
+    pub overwrite_existing: bool,
+
     /// Add some suffix in output file to avoid filename collision. For example, 
     /// "--output-suffix _merge"
     #[clap(long)]
@@ -187,6 +191,7 @@ impl Args {
             image_quality: self.image_quality,
             gainmap_quality: self.gainmap_quality,
             strip_original_exif: self.strip_original_exif, 
+            overwrite_existing: self.overwrite_existing,
         });
         Ok(())
     }
