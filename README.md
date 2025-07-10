@@ -64,5 +64,7 @@ aa-photo-bridge d:\tmp\iPhone --original delete --exiftool 'c:\Program Files\exi
 ```
 
 ## Known problems
+- [ ] Some videos are internally marked with a "rotate" flag. Video players handle them correctly, but photo albums may not. In that case, I recommend use `scripts/preprocess-fix-rotations.py` and do a ffmpeg re-encode before converting.
+- [ ] Internet downloaded photo files may have wrong creation time / modification time. In that case, I recommend use `scripts/postprocess-set-file-times.py` which sets file ctime/mtime as photo time in exif if present.
 - [x] Audio in motion photos does not work, at least on my Xiaomi phone. This is because Apple encodes audio in pcm_s16le, which is not widely supported.
     - [x] TODO: use ffmpeg-cli or libffmpeg to convert audio to aac / ac3.
