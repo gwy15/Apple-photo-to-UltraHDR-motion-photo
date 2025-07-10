@@ -21,6 +21,7 @@ impl ExifTool {
             .command()
             .arg(format!("-{key}"))
             .args(["-s", "-s", "-s"])
+            .arg("-m") // ignore minor error
             .arg(file.as_ref().as_os_str())
             .output()
             .context("Run exiftool command failed. Is exiftool path corrent?")?;
