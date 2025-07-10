@@ -14,7 +14,6 @@ pub struct ConvertRequest {
     // 用 exiftool 实现 exif 写入
     pub exiftool_path: Option<PathBuf>,
 
-    pub strip_original_exif: bool,
     pub overwrite_existing: bool,
 
     /// [0, 100]
@@ -30,7 +29,7 @@ impl ConvertRequest {
     }
 
     fn is_input_heic(&self) -> anyhow::Result<bool> {
-        let ans = self.image_extension()?.to_ascii_lowercase() == "heic";
+        let ans = self.image_extension()?.eq_ignore_ascii_case("heic");
         Ok(ans)
     }
 

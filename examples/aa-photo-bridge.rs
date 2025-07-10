@@ -29,11 +29,6 @@ pub struct Args {
     pub original: Original,
 
     #[clap(long)]
-    /// For sina images, exiftool may have problem parsing exif infos.
-    /// Use this flag to strip all exif infos before writing new ones.
-    pub strip_original_exif: bool,
-
-    #[clap(long)]
     /// Overwrite output file if already exist.
     pub overwrite_existing: bool,
 
@@ -190,7 +185,6 @@ impl Args {
             exiftool_path: self.exiftool.clone(),
             image_quality: self.image_quality,
             gainmap_quality: self.gainmap_quality,
-            strip_original_exif: self.strip_original_exif, 
             overwrite_existing: self.overwrite_existing,
         });
         Ok(())

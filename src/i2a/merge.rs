@@ -49,22 +49,11 @@ impl ConvertRequest {
         let mut image = std::fs::File::open(&self.image_path)?;
         std::io::copy(&mut image, &mut output)?;
         std::mem::drop(output);
-
-        if self.strip_original_exif {
-            let mut cmd = self.exif_tool().command();
-            cmd.arg("-All=").arg(&self.output_path);
-            let output = cmd.output().context("Run exiftool strip failed")?;
-            if !output.status.success() {
-                info!("Failed to run task: {:?}", cmd);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                bail!("Run exiftool failed when stripping all exif: {}", stderr);
-            }
-        }
         Ok(())
     }
     pub(crate) fn append_video(&self, video: &Path) -> anyhow::Result<()> {
         let mut output = std::fs::File::options().append(true).truncate(false).open(&self.output_path)?;
-        let mut video = std::fs::File::open(&video)?;
+        let mut video = std::fs::File::open(video)?;
         std::io::copy(&mut video, &mut output)?;
         Ok(())
     }
@@ -114,6 +103,7 @@ impl ConvertRequest {
             .arg(format!("-XMP-GCamera:MicroVideoOffset={video_size}"))
             .arg("-XiaomiTag=1")
             .arg("-overwrite_original")
+            .arg("-m") // ignore minor error, as per https://exiftool.org/forum/index.php?topic=7341.0
             .arg(&self.output_path);
         let output = cmd.output().context("Run exiftool failed when writing tags")?;
         if !output.status.success() {
