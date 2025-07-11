@@ -187,6 +187,8 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - uses: lukka/get-cmake@latest
+        with:
+        cmakeVersion: "~3.31.0"
 
       - name: Set up vcpkg
         run: |
