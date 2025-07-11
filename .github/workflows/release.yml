@@ -188,7 +188,7 @@ jobs:
 
       - uses: lukka/get-cmake@latest
         with:
-        cmakeVersion: "~3.31.0"
+          cmakeVersion: "~3.31.0"
 
       - name: Set up vcpkg
         run: |
