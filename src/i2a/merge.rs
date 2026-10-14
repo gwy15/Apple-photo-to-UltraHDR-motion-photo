@@ -16,11 +16,13 @@ impl ConvertRequest {
         if !self.image_path.is_file() {
             bail!("Image is not a file");
         }
-        if !self.video_path.exists() {
-            bail!("Video does not exist");
-        }
-        if !self.video_path.is_file() {
-            bail!("Video is not a file");
+        if let Some(video_path) = self.video_path.as_deref() {
+            if !video_path.exists() {
+                bail!("Video does not exist");
+            }
+            if !video_path.is_file() {
+                bail!("Video is not a file");
+            }
         }
         if self.output_path.is_dir() {
             bail!("Output path is a directory");
@@ -84,7 +86,11 @@ impl ConvertRequest {
         Ok(micro_video.is_some())
     }
 
-    pub(crate) fn update_motion_photo_exif(&self, video_path: &Path) -> anyhow::Result<()> {
+    /// 一次性写完输出文件的全部元数据：从源图拷贝所需 tag + 动态照片的 XMP 标签。
+    /// `video_size` 是实际追加到输出末尾的视频字节数（静态照片传 None）。
+    /// 原实现拆成 copy_meta + update_motion_photo_exif 两次调用，每次都让 exiftool
+    /// 用 -overwrite_original 整个重写文件，等于把输出白白多写 1~2 遍。
+    pub(crate) fn write_output_metadata(&self, src_image: &Path, video_size: Option<u64>) -> anyhow::Result<()> {
         // release exiftool.config
         use std::io::Write;
         const EXIFTOOL_CONFIG: &str = include_str!("exiftool.config");
@@ -93,16 +99,20 @@ impl ConvertRequest {
         temp_config.flush()?;
 
         let mut cmd = self.exif_tool().command();
-        let video_size = video_path.metadata()?.len();
         cmd.args(["-config", temp_config.path().to_str().unwrap()])
-            .args([
+            .arg("-TagsFromFile")
+            .arg(src_image.as_os_str())
+            .arg("-Orientation="); // 清掉来自 HEIC 的方向 tag，方向已体现在像素数据里
+        if let Some(video_size) = video_size {
+            cmd.args([
                 "-XMP-GCamera:MicroVideo=1",
                 "-XMP-GCamera:MicroVideoVersion=1",
                 "-XMP-GCamera:MicroVideoPresentationTimestampUs=1500000",
             ])
             .arg(format!("-XMP-GCamera:MicroVideoOffset={video_size}"))
-            .arg("-XiaomiTag=1")
-            .arg("-overwrite_original")
+            .arg("-XiaomiTag=1");
+        }
+        cmd.arg("-overwrite_original")
             .arg("-m") // ignore minor error, as per https://exiftool.org/forum/index.php?topic=7341.0
             .arg(&self.output_path);
         let output = cmd.output().context("Run exiftool failed when writing tags")?;

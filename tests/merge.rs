@@ -8,12 +8,14 @@ fn main() {
     if output.exists() {
         std::fs::remove_file(&output).unwrap();
     }
+    std::fs::create_dir_all("./testoutput").unwrap();
 
     aa_photo_bridge::i2a::ConvertRequest {
         image_path: "./tests/IMG_3853.HEIC".into(),
-        video_path: "./tests/IMG_3853.MOV".into(),
+        video_path: Some("./tests/IMG_3853.MOV".into()),
         output_path: output,
-        exiftool_path: Some(r"c:\My Program Files\exiftool\exiftool.exe".into()),
+        exiftool_path: Some("exiftool".into()),
+        overwrite_existing: false,
         image_quality: 85,
         gainmap_quality: 85,
     }
