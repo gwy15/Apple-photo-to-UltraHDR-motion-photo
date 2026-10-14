@@ -1,8 +1,8 @@
 //! 任务发现 (task discovery) 的集成测试。
 //! 全部走公共 seam：`discover(root, &DiscoverOptions)`。
 
-use aa_photo_bridge::discover::{discover, DiscoverOptions, DiscoveryIssue, DiscoveryIssueKind};
-use std::{fs, path::PathBuf};
+use aa_photo_bridge::discover::{discover, DiscoverOptions, DiscoveryIssueKind};
+use std::{collections::HashSet, fs, path::PathBuf};
 
 /// 每个测试一个临时目录 fixture。
 struct Fixture(tempfile::TempDir);
@@ -193,4 +193,59 @@ fn strict_mode_reports_all_duplicate_conflicts() {
     assert!(msg.contains("IMG_0020"), "{msg}");
     assert!(msg.contains("IMG_0021"), "{msg}");
     assert!(!msg.contains("IMG_0022"), "{msg}");
+}
+
+#[test]
+fn strict_mode_also_reports_duplicate_videos() {
+    let f = Fixture::new();
+    f.touch("IMG_0030.HEIC");
+    f.touch("IMG_0030.MOV");
+    f.touch("IMG_0030.mp4");
+
+    let opts = DiscoverOptions {
+        strict: true,
+        ..Default::default()
+    };
+    let err = discover(&f.root(), &opts).unwrap_err();
+
+    let msg = format!("{err:#}");
+    assert!(msg.contains("DuplicateVideo"), "{msg}");
+    assert!(msg.contains("IMG_0030.mp4"), "{msg}");
+}
+
+#[test]
+fn duplicate_outputs_are_deduped() {
+    let f = Fixture::new();
+    // 同一 stem 两张图：heic 选中，jpg 被忽略，但两个入口的输出名相同。
+    // 触发规则已保证每 stem 一个任务，这里验证的是发现结果层面无重复输出。
+    let heic = f.touch("IMG_0031.HEIC");
+    let mov = f.touch("IMG_0031.MOV");
+    f.touch("IMG_0031.JPG");
+
+    let d = discover(&f.root(), &opts()).unwrap();
+
+    let outputs: Vec<_> = d.photos.iter().map(|p| &p.output).collect();
+    assert_eq!(d.photos.len(), 1, "photos: {:?}", d.photos);
+    assert_eq!(outputs.len(), outputs.iter().collect::<HashSet<_>>().len());
+    assert_eq!(d.photos[0].image, heic);
+    assert_eq!(d.photos[0].video.as_deref(), Some(mov.as_path()));
+}
+
+#[test]
+fn symlinked_pair_is_not_selected_by_find_ext() {
+    let f = Fixture::new();
+    let heic = f.touch("IMG_0032.HEIC");
+    // 视频是指向目录外文件的 symlink：walk 跳过它，配对也不该把它选进来。
+    let external = f.root().join("external.MOV");
+    fs::write(&external, b"x").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&external, f.root().join("IMG_0032.MOV")).unwrap();
+
+    let d = discover(&f.root(), &opts()).unwrap();
+
+    // 视频 entry 被 walk 跳过 + find_ext 不跟随链接 → 退化为静态照片任务，而不是消失。
+    assert_eq!(d.photos.len(), 1, "photos: {:?}", d.photos);
+    assert_eq!(d.photos[0].image, heic);
+    assert_eq!(d.photos[0].video, None);
+    assert!(d.issues.iter().any(|i| i.kind == DiscoveryIssueKind::SymlinkSkipped));
 }

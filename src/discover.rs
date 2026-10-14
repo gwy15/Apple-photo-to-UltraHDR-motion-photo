@@ -144,12 +144,32 @@ impl<'a> Visitor<'a> {
         anyhow::ensure!(path.is_dir(), "Not a directory: {:?}", path);
 
         let entries = std::fs::read_dir(path)?;
-        let mut entries: Vec<_> = entries.collect::<std::io::Result<Vec<_>>>()?;
+        let mut entries: Vec<_> = entries
+            .filter_map(|entry| match entry {
+                Ok(entry) => Some(entry),
+                // 单个目录项读不动不中止整棵树的遍历，记为 issue。
+                Err(err) => {
+                    warn!("Skipping unreadable directory entry in {}: {err}", path.display());
+                    self.issues.push(DiscoveryIssue {
+                        kind: DiscoveryIssueKind::UnknownFile,
+                        path: path.to_path_buf(),
+                    });
+                    None
+                }
+            })
+            .collect();
         // 先排序保证跨目录的输出顺序确定（测试与日志可复现）。
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
             let path = entry.path();
-            let file_type = entry.file_type()?;
+            let Ok(file_type) = entry.file_type() else {
+                warn!("Skipping unreadable entry type: {}", path.display());
+                self.issues.push(DiscoveryIssue {
+                    kind: DiscoveryIssueKind::UnknownFile,
+                    path,
+                });
+                continue;
+            };
             if file_type.is_dir() {
                 self.visit(&path)?;
                 continue;
@@ -180,12 +200,17 @@ impl<'a> Visitor<'a> {
     }
 
     fn try_visit_file(&mut self, path: &Path) -> Result<()> {
+        // 不跟随 symlink：配对时把链接当不存在（walk 层已把 symlink 记为 issue 跳过），
+        // 否则「视频是指向别处的链接」会让视频入口不触发、图片入口因 video_path 存在
+        // 也不触发，整个 stem 静默消失。
         let find_ext = |ext: &str| -> Option<PathBuf> {
             let lower = path.with_extension(ext);
             let upper = path.with_extension(ext.to_uppercase());
-            if lower.exists() {
+            // symlink_metadata 不跟随最后一段链接。
+            let is_real_file = |p: &Path| p.symlink_metadata().map(|m| m.is_file()).unwrap_or(false);
+            if is_real_file(&lower) {
                 Some(lower)
-            } else if upper.exists() {
+            } else if is_real_file(&upper) {
                 Some(upper)
             } else {
                 None
@@ -229,19 +254,27 @@ impl<'a> Visitor<'a> {
                 kind: DiscoveryIssueKind::NotHeic,
                 path: image_path.clone(),
             });
+            // 该 stem 不会建任务，pending 的重名图也一并落下，避免静默丢失。
+            self.record_duplicate_image_issues(&image_path);
             return Ok(());
         }
-
         let mut found_video = self.video_exts.iter().filter_map(|ext| find_ext(ext)).collect::<Vec<_>>();
         found_video.sort();
         if found_video.len() > 1 {
             warn!("Multiple videos found with the same name, using {}:", found_video[0].display());
             for extra in &found_video[1..] {
-                warn!("    - ignored {}", extra.display());
-                self.issues.push(DiscoveryIssue {
-                    kind: DiscoveryIssueKind::DuplicateVideo,
-                    path: extra.clone(),
-                });
+                if self.options.strict {
+                    self.strict_conflicts.push(DiscoveryIssue {
+                        kind: DiscoveryIssueKind::DuplicateVideo,
+                        path: extra.clone(),
+                    });
+                } else {
+                    warn!("    - ignored {}", extra.display());
+                    self.issues.push(DiscoveryIssue {
+                        kind: DiscoveryIssueKind::DuplicateVideo,
+                        path: extra.clone(),
+                    });
+                }
             }
         }
         let video_path = found_video.into_iter().next();
@@ -300,21 +333,16 @@ impl<'a> Visitor<'a> {
 
     /// 遍历结束后收尾：去重 + strict 汇总。
     fn finish(self) -> Result<Discovery> {
+        if !self.strict_conflicts.is_empty() {
+            bail!("{}", StrictErrors(self.strict_conflicts));
+        }
         let mut photos = self.photos;
         // 防御：同一个输出文件不该出现两次，-j 并行下会互相踩。
         photos.sort_by(|a, b| a.output.cmp(&b.output));
         let collected = photos.len();
         photos.dedup_by(|a, b| a.output == b.output);
         if photos.len() != collected {
-            let dropped = collected - photos.len();
-            warn!("Ignored {dropped} duplicate task(s)");
-            for extra in &self.strict_conflicts {
-                warn!("    - strict: {}", extra.path.display());
-            }
-        }
-
-        if !self.strict_conflicts.is_empty() {
-            bail!("{}", StrictErrors(self.strict_conflicts));
+            warn!("Ignored {} duplicate task(s)", collected - photos.len());
         }
         let mut issues = self.issues;
         // 稳定排序让测试可以按 kind 断言单个元素，也让日志顺序确定。
