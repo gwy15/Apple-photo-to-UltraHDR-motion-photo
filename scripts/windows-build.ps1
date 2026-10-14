@@ -61,8 +61,8 @@ Function Compile-Rust {
 
     $env:PATH = "$env:PATH;$env:UHDR_LIB_PATH;$root/deps/install/bin"
 
-    cargo build --example aa-photo-bridge --release
-    # cargo run --example aa-photo-bridge --release
+    cargo build --bin aa-photo-bridge --release
+    # cargo run --bin aa-photo-bridge --release
 }
 
 #Build-Heif

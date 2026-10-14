@@ -35,7 +35,10 @@ impl ConvertRequest {
     }
 
     pub fn convert(&self) -> anyhow::Result<()> {
-        let video = self.video_path.as_deref().map_or_else(|| "<static photo>".to_string(), |p| p.display().to_string());
+        let video = self
+            .video_path
+            .as_deref()
+            .map_or_else(|| "<static photo>".to_string(), |p| p.display().to_string());
         debug!(
             "Running convert request {} + {} => {}",
             self.image_path.display(),

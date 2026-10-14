@@ -83,8 +83,8 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           export FFMPEG_PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
-          cargo build --example aa-photo-bridge --release
-          cp target/release/examples/aa-photo-bridge aa-photo-bridge
+          cargo build --bin aa-photo-bridge --release
+          cp target/release/aa-photo-bridge aa-photo-bridge
 
       - uses: actions/upload-artifact@v4
         with:
@@ -161,8 +161,8 @@ jobs:
           export TURBOJPEG_LIB_DIR=$(realpath pkg-config/lib)
           export TURBOJPEG_INCLUDE_PATH=$(realpath pkg-config/include)
           export FFMPEG_PKG_CONFIG_PATH=$(realpath pkg-config/lib/pkgconfig)
-          cargo build --example aa-photo-bridge --release
-          cp target/release/examples/aa-photo-bridge aa-photo-bridge
+          cargo build --bin aa-photo-bridge --release
+          cp target/release/aa-photo-bridge aa-photo-bridge
 
       - uses: actions/upload-artifact@v4
         with:
@@ -235,7 +235,7 @@ jobs:
           $env:VCPKG_ROOT="C:\vcpkg"
           . ./scripts/windows-build.ps1
           Compile-Rust
-          cp target/release/examples/aa-photo-bridge.exe aa-photo-bridge.exe
+          cp target/release/aa-photo-bridge.exe aa-photo-bridge.exe
 
       - uses: actions/upload-artifact@v4
         with:

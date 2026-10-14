@@ -3,9 +3,9 @@ name = "aa-photo-bridge"
 version = "0.1.0"
 edition = "2021"
 
-[[example]]
-path = "examples/aa-photo-bridge.rs"
+[[bin]]
 name = "aa-photo-bridge"
+path = "src/bin/aa-photo-bridge.rs"
 
 [profile.release]
 lto = true
@@ -20,6 +20,10 @@ libultrahdr-rs = "0.1.0"
 turbojpeg = { version = "1.2.1", default-features = false }
 turbojpeg-sys = { version = "1", default-features = false }
 rayon = "1.10.0"
+clap = { version = "4.5.26", features = ["derive"] }
+indicatif = "0.17.9"
+tracing-indicatif = "0.3.9"
+tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 
 [dependencies.rsmpeg]
 version = "0.15.1"
@@ -27,7 +31,4 @@ default-features = false
 features = ["ffmpeg7"]
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
-clap = { version = "4.5.26", features = ["derive"] }
-indicatif = "0.17.9"
-tracing-indicatif = "0.3.9"
+
