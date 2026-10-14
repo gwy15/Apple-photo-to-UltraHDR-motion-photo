@@ -19,41 +19,35 @@ impl ConvertRequest {
         self.do_convert_heic_to_jpg(&self.image_path, &self.output_path)
             .with_context(|| format!("convert heic to jpeg failed: {}", self.image_path.display()))?;
         debug!(size=%self.output_path.metadata()?.len(), "heic converted to jpg");
-        // sync metadata
-        self.exif_tool()
-            .copy_meta(&self.image_path, &self.output_path)
-            .context("write exiftool failed")?;
-        trace!("heic convert: jpg exif copied");
+        // 元数据统一在 convert() 末尾用一次 exiftool 写入（copy_meta 已合并进去）
         Ok(())
     }
 
-    /// Return Some(headroom) if HDR heic, None if not HDR heic
-    fn get_apple_headroom_from_exif(&self, path: &Path) -> anyhow::Result<Option<f32>> {
+    /// 从已一次读出的 exif 值里判断 Apple HDR headroom。
+    /// `values` 依次为: xmp:HDRGainMapVersion / xmp:HDRGainMapHeadroom / MakerNotes:HDRHeadroom / MakerNotes:HDRGain
+    fn apple_headroom_from_values(&self, values: &[Option<String>]) -> anyhow::Result<Option<f32>> {
         // credit: https://github.com/johncf/apple-hdr-heic/blob/e64716c29abc91a3b40543d7c47fb0f526608982/src/apple_hdr_heic/metadata.py#L17
         // reference: https://developer.apple.com/documentation/appkit/images_and_pdf/applying_apple_hdr_effect_to_your_photos
         //            https://github.com/exiftool/exiftool/blob/405674e0/lib/Image/ExifTool/Apple.pm
         // verify HDRGainMapVersion key
-        let hdr_version = self.exif_tool().get_value(path, "xmp:HDRGainMapVersion")?;
-        let Some(hdr_version) = hdr_version else {
+        let Some(hdr_version) = values[0].as_deref() else {
             debug!("no HDRGainMapVersion, not HDR heic");
             return Ok(None);
         };
         trace!("detected Apple HDRGainMapVersion = {hdr_version}");
-        if let Some(headroom) = self.exif_tool().get_value(path, "xmp:HDRGainMapHeadroom")? {
+        if let Some(headroom) = values[1].as_deref() {
             trace!(%headroom, "got xmp:HDRGainMapHeadroom");
             let headroom = headroom.parse::<f32>().context("Invalid HDRGainMapHeadroom value")?;
             return Ok(Some(headroom));
         }
         // get markers
-        let marker33 = self
-            .exif_tool()
-            .get_value(path, "MakerNotes:HDRHeadroom")?
+        let marker33 = values[2]
+            .as_deref()
             .context("No Markers MakerNotes:HDRHeadroom found, not HDR heic")?
             .parse::<f32>()
             .context("Invalid Marker33 value")?;
-        let marker48 = self
-            .exif_tool()
-            .get_value(path, "MakerNotes:HDRGain")?
+        let marker48 = values[3]
+            .as_deref()
             .context("No Markers MakerNotes:HDRGain found, not HDR heic")?
             .parse::<f32>()
             .context("Invalid Marker48 value")?;
@@ -214,10 +208,18 @@ impl ConvertRequest {
     }
 
     fn do_convert_heic_to_jpg(&self, src: &Path, output: &Path) -> anyhow::Result<()> {
-        let profile = self.exif_tool().get_value(src, "ProfileDescription")?;
-        if let Some(profile) = profile.as_ref() {
-            anyhow::ensure!(profile.starts_with("Display P3"));
-        }
+        // 一次读出全部需要的标签（原来这里要 spawn 多达 5 次 exiftool）
+        let values = self.exif_tool().get_values(
+            src,
+            &[
+                "ProfileDescription",
+                "xmp:HDRGainMapVersion",
+                "xmp:HDRGainMapHeadroom",
+                "MakerNotes:HDRHeadroom",
+                "MakerNotes:HDRGain",
+            ],
+        )?;
+        let profile = values[0].clone();
         trace!(?profile, "ProfileDescription");
         // open image and decode
         let span = info_span!("decode heic");
@@ -238,7 +240,7 @@ impl ConvertRequest {
         let mut primary_image = info_span!("encoding sdr to jpg").in_scope(|| self.convert_primary_image_to_jpg(&primary_image))?;
 
         // check if apple HDR
-        let apple_headroom = self.get_apple_headroom_from_exif(src)?;
+        let apple_headroom = self.apple_headroom_from_values(&values[1..])?;
         debug!(?apple_headroom, "apple headroom");
         let Some(apple_headroom) = apple_headroom else {
             debug!("not apple HDR, skip HDR");
@@ -246,6 +248,14 @@ impl ConvertRequest {
             return Ok(());
         };
         anyhow::ensure!(profile.is_some(), "Apple headroom found, but ProfileDescription not found in exif");
+        // 只有真的要走 P3 HDR 编码时才要求 Display P3。Apple 的 gainmap 照片都是 P3，
+        // 但 sRGB 的普通照片没有 gainmap，会在上面提前返回，不该被这个断言拦下。
+        if let Some(profile) = profile.as_ref() {
+            anyhow::ensure!(
+                profile.starts_with("Display P3"),
+                "Apple headroom found, but color profile is not Display P3: {profile}"
+            );
+        }
 
         // write ultra HDR image
         let mut encoder = libultrahdr_rs::Encoder::new();
