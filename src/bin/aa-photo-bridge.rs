@@ -9,7 +9,7 @@ use tracing::*;
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 use tracing_subscriber::prelude::*;
 
-use aa_photo_bridge::discover::{self, DiscoverOptions, DiscoveryIssueKind};
+use aa_photo_bridge::discover::{self, DiscoverOptions};
 
 #[derive(Parser)]
 pub struct Args {
@@ -100,17 +100,8 @@ fn main() -> Result<()> {
     tracing_subscriber::registry().with(fmt_layer).with(indicatif_layer).init();
 
     // 1. collect all tasks
+    // 非致命问题由 discover 内部统一 warn（单一报告层），strict 冲突直接 Err。
     let discovery = discover::discover(&args.path, &args.discover_options()).context("Task discovery failed")?;
-    // 汇总发现阶段的非致命问题（strict 冲突已经在 discover 里 Err 掉了）。
-    for issue in &discovery.issues {
-        match issue.kind {
-            DiscoveryIssueKind::DuplicateImage => warn!("Multiple images found with the same name, ignoring {}", issue.path.display()),
-            DiscoveryIssueKind::DuplicateVideo => warn!("Multiple videos found with the same name, ignoring {}", issue.path.display()),
-            DiscoveryIssueKind::SymlinkSkipped => warn!("Symbolic link found, ignoring: {}", issue.path.display()),
-            DiscoveryIssueKind::UnknownFile => warn!("Skipping unreadable file: {}", issue.path.display()),
-            DiscoveryIssueKind::NotHeic => warn!("Not a heic (no Apple HDR gainmap), skipping {}", issue.path.display()),
-        }
-    }
     let tasks: Vec<aa_photo_bridge::i2a::ConvertRequest> = discovery
         .photos
         .into_iter()

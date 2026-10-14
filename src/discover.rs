@@ -39,6 +39,12 @@ pub struct DiscoveryIssue {
     pub path: PathBuf,
 }
 
+impl DiscoveryIssue {
+    fn new(kind: DiscoveryIssueKind, path: impl Into<PathBuf>) -> Self {
+        DiscoveryIssue { kind, path: path.into() }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DiscoveryIssueKind {
     /// 同一 stem 有多张图，除选中那张外其余被忽略。
@@ -81,22 +87,20 @@ pub struct DiscoverOptions {
 }
 
 impl DiscoverOptions {
-    fn image_extensions(&self) -> HashSet<String> {
-        self.image_extensions
-            .as_deref()
-            .unwrap_or("heic,jpg,jpeg")
+    fn extensions<'a>(&'a self, opt: &'a Option<String>, default: &'static str) -> HashSet<String> {
+        opt.as_deref()
+            .unwrap_or(default)
             .split(',')
             .map(|s| s.to_ascii_lowercase().to_string())
             .collect()
     }
 
+    fn image_extensions(&self) -> HashSet<String> {
+        self.extensions(&self.image_extensions, "heic,jpg,jpeg")
+    }
+
     fn video_extensions(&self) -> HashSet<String> {
-        self.video_extensions
-            .as_deref()
-            .unwrap_or("mov,mp4")
-            .split(',')
-            .map(|s| s.to_ascii_lowercase().to_string())
-            .collect()
+        self.extensions(&self.video_extensions, "mov,mp4")
     }
 }
 
@@ -150,10 +154,7 @@ impl<'a> Visitor<'a> {
                 // 单个目录项读不动不中止整棵树的遍历，记为 issue。
                 Err(err) => {
                     warn!("Skipping unreadable directory entry in {}: {err}", path.display());
-                    self.issues.push(DiscoveryIssue {
-                        kind: DiscoveryIssueKind::UnknownFile,
-                        path: path.to_path_buf(),
-                    });
+                    self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::UnknownFile, &path));
                     None
                 }
             })
@@ -164,10 +165,7 @@ impl<'a> Visitor<'a> {
             let path = entry.path();
             let Ok(file_type) = entry.file_type() else {
                 warn!("Skipping unreadable entry type: {}", path.display());
-                self.issues.push(DiscoveryIssue {
-                    kind: DiscoveryIssueKind::UnknownFile,
-                    path,
-                });
+                self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::UnknownFile, path));
                 continue;
             };
             if file_type.is_dir() {
@@ -176,10 +174,7 @@ impl<'a> Visitor<'a> {
             }
             if file_type.is_symlink() {
                 warn!("Symbolic link found, ignoring: {}", path.display());
-                self.issues.push(DiscoveryIssue {
-                    kind: DiscoveryIssueKind::SymlinkSkipped,
-                    path,
-                });
+                self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::SymlinkSkipped, path));
                 continue;
             }
             self.visit_file(&path);
@@ -192,10 +187,7 @@ impl<'a> Visitor<'a> {
             // 单个文件的怪异（类型不明、读不动等）不中止整棵目录树的遍历，
             // 记入 issues 让调用方汇总——几百张照片里混进一个坏文件是常态。
             warn!("Skipping {}: {err:#}", path.display());
-            self.issues.push(DiscoveryIssue {
-                kind: DiscoveryIssueKind::UnknownFile,
-                path: path.to_path_buf(),
-            });
+            self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::UnknownFile, path));
         }
     }
 
@@ -234,10 +226,8 @@ impl<'a> Visitor<'a> {
             warn!("Multiple images found with the same name, using {}:", found_image[0].display());
             for extra in &found_image[1..] {
                 if self.options.strict {
-                    self.strict_conflicts.push(DiscoveryIssue {
-                        kind: DiscoveryIssueKind::DuplicateImage,
-                        path: extra.clone(),
-                    });
+                    self.strict_conflicts
+                        .push(DiscoveryIssue::new(DiscoveryIssueKind::DuplicateImage, extra));
                 } else {
                     // 先挂到 stem 上，等触发路径真正建任务时再落 issues，避免重复计入。
                     let stem = found_image[0].with_extension("");
@@ -250,10 +240,7 @@ impl<'a> Visitor<'a> {
         // 只有 heic 带 Apple HDR gainmap；jpg/png 是 SDR，走转换也只是原样拷贝一份。
         if !image_path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("heic")) {
             warn!("Not a heic (no Apple HDR gainmap), skipping {}", image_path.display());
-            self.issues.push(DiscoveryIssue {
-                kind: DiscoveryIssueKind::NotHeic,
-                path: image_path.clone(),
-            });
+            self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::NotHeic, &image_path));
             // 该 stem 不会建任务，pending 的重名图也一并落下，避免静默丢失。
             self.record_duplicate_image_issues(&image_path);
             return Ok(());
@@ -264,16 +251,11 @@ impl<'a> Visitor<'a> {
             warn!("Multiple videos found with the same name, using {}:", found_video[0].display());
             for extra in &found_video[1..] {
                 if self.options.strict {
-                    self.strict_conflicts.push(DiscoveryIssue {
-                        kind: DiscoveryIssueKind::DuplicateVideo,
-                        path: extra.clone(),
-                    });
+                    self.strict_conflicts
+                        .push(DiscoveryIssue::new(DiscoveryIssueKind::DuplicateVideo, extra));
                 } else {
                     warn!("    - ignored {}", extra.display());
-                    self.issues.push(DiscoveryIssue {
-                        kind: DiscoveryIssueKind::DuplicateVideo,
-                        path: extra.clone(),
-                    });
+                    self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::DuplicateVideo, extra));
                 }
             }
         }
@@ -309,10 +291,7 @@ impl<'a> Visitor<'a> {
                 continue;
             }
             warn!("    - ignored {}", extra.display());
-            self.issues.push(DiscoveryIssue {
-                kind: DiscoveryIssueKind::DuplicateImage,
-                path: extra,
-            });
+            self.issues.push(DiscoveryIssue::new(DiscoveryIssueKind::DuplicateImage, extra));
         }
     }
 
