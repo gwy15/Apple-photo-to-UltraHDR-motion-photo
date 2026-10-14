@@ -4,6 +4,7 @@ use rayon::prelude::*;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicUsize, Ordering},
 };
 use tracing::*;
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -65,6 +66,14 @@ pub struct Args {
 pub enum Original {
     Keep,
     Delete,
+}
+
+/// 同一个 stem 有多张图片时的挑选优先级：heic（HDR 源）优先，其余次之。
+fn image_priority(path: &Path) -> u8 {
+    match path.extension().and_then(|ext| ext.to_str()).map(str::to_ascii_lowercase).as_deref() {
+        Some("heic") => 0,
+        _ => 1,
+    }
 }
 
 impl Args {
@@ -129,49 +138,57 @@ impl Args {
         };
 
         anyhow::ensure!(path.is_file(), "Unknown type: {}", path.display());
-        let mut found_image = image_allow_ext
-            .iter()
-            .filter_map(|ext| find_ext(ext).or_else(|| find_ext(&ext.to_uppercase())))
-            .collect::<Vec<_>>();
+        let mut found_image = image_allow_ext.iter().filter_map(|ext| find_ext(ext)).collect::<Vec<_>>();
         if found_image.is_empty() {
             return Ok(());
         }
+        // 同一个 stem 可能同时存在 .HEIC（带 Apple HDR gainmap 的源）和 .JPG（SDR 导出），
+        // iCloud 里很常见。排序后取第一个以保证结果确定——原来直接 pop() 一个 HashSet 的
+        // 迭代结果，选中哪张是随机的。
+        found_image.sort_by(|a, b| image_priority(a).cmp(&image_priority(b)).then_with(|| a.as_os_str().cmp(b.as_os_str())));
         if found_image.len() > 1 {
-            warn!("Multiple images found with the same name found:");
-            for path in found_image {
-                warn!("    - {}", path.display());
+            warn!("Multiple images found with the same name, using {}:", found_image[0].display());
+            for extra in &found_image[1..] {
+                warn!("    - ignored {}", extra.display());
             }
             if self.strict {
                 std::process::exit(1);
             }
-            return Ok(());
         }
-        let image_path = found_image.pop().unwrap();
-        if image_path.as_os_str().eq_ignore_ascii_case(path.as_os_str()) {
-            return Ok(());
-        }
-        // anyhow::ensure!(image_path == path, "{image_path:#?} != {path:#?}");
+        let image_path = found_image.remove(0);
 
-        let mut found_video = video_allow_ext
-            .iter()
-            .filter_map(|ext| find_ext(ext).or_else(|| find_ext(&ext.to_uppercase())))
-            .collect::<Vec<_>>();
-        if found_video.is_empty() {
+        // 只有 heic 带 Apple HDR gainmap；jpg/png 是 SDR，走转换也只是原样拷贝一份。
+        if !image_path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("heic")) {
+            warn!("Not a heic (no Apple HDR gainmap), skipping {}", image_path.display());
             return Ok(());
         }
+
+        let mut found_video = video_allow_ext.iter().filter_map(|ext| find_ext(ext)).collect::<Vec<_>>();
+        found_video.sort();
         if found_video.len() > 1 {
-            warn!("Multiple videos found with the same name found:");
-            for path in found_video {
-                warn!("    - {}", path.display());
+            warn!("Multiple videos found with the same name, using {}:", found_video[0].display());
+            for extra in &found_video[1..] {
+                warn!("    - ignored {}", extra.display());
             }
             if self.strict {
                 std::process::exit(1);
             }
+        }
+        let video_path = found_video.into_iter().next();
+
+        // 每个 stem 只建一个任务：有视频时由「迭代到视频」那次触发，静态照片（无视频）时
+        // 由「迭代到图片」那次触发。否则同一个 stem 会从多个入口各建一次任务，-j 并行下
+        // 会同时写同一个输出文件。
+        let triggered_by_video = video_path
+            .as_ref()
+            .is_some_and(|video| video.as_os_str().eq_ignore_ascii_case(path.as_os_str()));
+        let triggered_by_image = image_path.as_os_str().eq_ignore_ascii_case(path.as_os_str());
+        let should_build = if video_path.is_some() { triggered_by_video } else { triggered_by_image };
+        if !should_build {
             return Ok(());
         }
-        let video_path = found_video.pop().unwrap();
 
-        let mut output_path = path.with_extension("jpg");
+        let mut output_path = image_path.with_extension("jpg");
         if let Some(suffix) = self.output_suffix.as_deref() {
             let stem = output_path.file_stem().unwrap().to_str().unwrap();
             let extension = output_path.extension().unwrap().to_str().unwrap();
@@ -215,6 +232,13 @@ fn main() -> Result<()> {
     // 1. collect all tasks
     let mut tasks = Vec::new();
     args.visit(&args.path, &mut tasks)?;
+    // 防御：同一个输出文件不该出现两次，-j 并行下会互相踩。
+    tasks.sort_by(|a, b| a.output_path.cmp(&b.output_path));
+    let collected = tasks.len();
+    tasks.dedup_by(|a, b| a.output_path == b.output_path);
+    if tasks.len() != collected {
+        warn!("Ignored {} duplicate task(s)", collected - tasks.len());
+    }
 
     // 2. run all tasks
     info!("Running {} tasks", tasks.len());
@@ -225,24 +249,27 @@ fn main() -> Result<()> {
     let guard = span.enter();
     let t = std::time::Instant::now();
 
-    if args.parallel {
-        tasks
-            .into_par_iter()
-            .map(|task| {
-                run(task, args.original)?;
-                span.pb_inc(1);
-                Ok(())
-            })
-            .collect::<Result<Vec<_>>>()?;
-    } else {
-        for task in tasks {
-            run(task, args.original)?;
-            span.pb_inc(1);
+    // 单个文件失败不该中止整批：几百张照片里有一张坏文件是常态。
+    // 记下失败数，全部跑完后汇总，并以非 0 退出码反映出来。
+    let failures = AtomicUsize::new(0);
+    let run_task = |task: Task| {
+        if let Err(err) = run(task, args.original) {
+            error!("{err:#}");
+            failures.fetch_add(1, Ordering::Relaxed);
         }
+        span.pb_inc(1);
+    };
+
+    if args.parallel {
+        tasks.into_par_iter().for_each(run_task);
+    } else {
+        tasks.into_iter().for_each(run_task);
     }
 
     drop(guard);
-    info!("All tasks completed in {:?}", t.elapsed());
+    let failures = failures.load(Ordering::Relaxed);
+    info!("All tasks completed in {:?}, {failures} failed", t.elapsed());
 
+    anyhow::ensure!(failures == 0, "{failures} task(s) failed");
     Ok(())
 }
