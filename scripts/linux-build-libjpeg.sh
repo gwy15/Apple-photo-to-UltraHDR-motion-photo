@@ -3,6 +3,7 @@ set -ex
 root=$(realpath "${1:-/}")
 path=$root/libjpeg
 install=$(realpath "${2:-/opt/pkg-config}")
+JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 echo "Building libjpeg in $path"
 if [ ! -d "$path" ]; then
     mkdir $path
@@ -15,4 +16,4 @@ fi
 cd $build
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$install \
       -DBUILD_SHARED_LIBS=OFF -DWITH_JPEG8=1 $path
-cmake --build $build
+cmake --build $build --parallel "$JOBS"

@@ -3,6 +3,7 @@ set -ex
 root=$(realpath "${1:-/}")
 path=$root/libffmpeg
 install=$(realpath "${2:-/opt/pkg-config}")
+JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 echo "Building libffmpeg in $path"
 if [ ! -d "$path" ]; then
     mkdir $path
@@ -17,4 +18,4 @@ cd $path
 ./configure --prefix=$install \
     --disable-programs --disable-doc --disable-network \
     --disable-metal
-make -j3
+make -j"$JOBS"

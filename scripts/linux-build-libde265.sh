@@ -3,6 +3,7 @@ set -ex
 root=$(realpath "${1:-/}")
 path=$root/libde265
 install=$(realpath "${2:-/opt/pkg-config}")
+JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 echo "Building libheif in $path"
 if [ ! -d "$path" ]; then
     mkdir $path
@@ -16,4 +17,4 @@ cd $build
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_INSTALL_PREFIX=$install \
     $path
-cmake --build $build
+cmake --build $build --parallel "$JOBS"

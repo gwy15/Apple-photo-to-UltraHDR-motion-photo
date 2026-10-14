@@ -3,6 +3,7 @@ set -ex
 root=$(realpath "${1:-/}")
 path=$root/libheif
 install=$(realpath "${2:-/opt/pkg-config}")
+JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 echo "Building libheif in $path"
 if [ ! -d "$path" ]; then
     mkdir $path
@@ -19,4 +20,4 @@ cmake --preset=release \
     -DWITH_HEADER_COMPRESSION=OFF -DWITH_UNCOMPRESSED_CODEC=OFF \
     -DWITH_LIBSHARPYUV=OFF -DWITH_FFMPEG_DECODER=OFF \
     $path
-cmake --build $build
+cmake --build $build --parallel "$JOBS"
